@@ -421,3 +421,259 @@ docker run -d \
 - Clear, human-readable error messages
 - If a job fails, show why (disk full, ffmpeg error, etc.)
 - Never leave temp files behind on failure
+
+---
+
+# Development Log - December 7-8, 2025
+
+This section documents the development session for handoff to future developers or Claude sessions.
+
+## Session Summary
+
+In this session, we built a **fully functional MVP** of Shrinkray. The app can browse media directories, probe video files, estimate space savings, queue transcode jobs, and execute them with hardware acceleration using macOS VideoToolbox.
+
+## GitHub Repository
+
+**URL**: https://github.com/gwlsn/shrinkray
+
+Created as a public repo with MIT license.
+
+## What Was Built
+
+### Core Backend (Go)
+
+1. **File Browser** (`internal/browse/browse.go`)
+   - Recursively browses directories
+   - Probes video files with ffprobe
+   - Returns metadata: codec, resolution, bitrate, duration
+   - Caches probe results in memory for performance
+
+2. **FFmpeg Integration** (`internal/ffmpeg/`)
+   - `probe.go` - ffprobe wrapper, parses JSON output
+   - `transcode.go` - ffmpeg wrapper with progress parsing
+   - `presets.go` - Preset definitions with dynamic bitrate calculation
+   - `estimate.go` - Space/time estimation logic
+   - `hwaccel.go` - Hardware acceleration detection (VideoToolbox, NVENC, VAAPI)
+
+3. **Job Queue** (`internal/jobs/`)
+   - `job.go` - Job struct with status, progress, bitrate, encoder info
+   - `queue.go` - Thread-safe queue with persistence to JSON file
+   - `worker.go` - Worker pool that processes jobs
+
+4. **HTTP API** (`internal/api/`)
+   - `handler.go` - REST endpoints for browse, jobs, presets, estimate
+   - `router.go` - Chi router setup with CORS
+   - `sse.go` - Server-Sent Events for real-time progress updates
+
+### Web UI (`web/templates/index.html`)
+
+Single-page embedded HTML with:
+- File browser with folder navigation
+- Multi-select with checkboxes and "Select All"
+- Preset dropdown
+- Estimate button showing space/time savings
+- Job queue display with progress bars
+- Real-time updates via SSE
+- Stats dashboard (pending, running, complete, failed, space saved)
+
+### Key Features Implemented
+
+1. **Hardware Acceleration**
+   - Auto-detects available encoders at startup
+   - Prefers VideoToolbox (macOS) > NVENC (NVIDIA) > VAAPI (Intel/AMD) > Software
+   - Shows "HARDWARE" or "SOFTWARE" badge on jobs in UI
+
+2. **Dynamic Bitrate Calculation**
+   - Hardware encoders (VideoToolbox) use bitrate mode, not CRF
+   - Calculates target bitrate as percentage of source:
+     - `standard` quality: 50% of source
+     - `smaller` quality: 35% of source
+   - Enforces min 500kbps, max 15000kbps bounds
+   - Software encoders continue to use CRF mode
+
+3. **Presets**
+   - `compress` - Standard quality, ~50% size reduction
+   - `compress-hard` - Smaller files, ~35% of source bitrate
+   - `1080p` - Downscale to 1080p max
+   - `720p` - Downscale to 720p max
+
+4. **Queue Persistence**
+   - Jobs saved to `config/queue.json`
+   - Survives server restarts
+   - Completed/failed jobs preserved for stats
+
+5. **Cache Invalidation**
+   - After transcode, cache is invalidated for the output file
+   - Browser refresh shows updated metadata
+
+## Technical Decisions Made
+
+### Why Bitrate Mode for Hardware Encoders
+
+VideoToolbox doesn't support CRF (Constant Rate Factor) like x265 does. We researched how Tdarr and other tools handle this:
+- They use average bitrate (`-b:v`) mode
+- Calculate target as percentage of source bitrate
+- This approach is industry-standard for hardware encoding
+
+### Dynamic Bitrate Calculation
+
+```go
+// In presets.go - BuildPresetArgs()
+if sourceBitrate > 0 && (preset.Encoder == HWAccelVideoToolbox || ...) {
+    sourceKbps := sourceBitrate / 1000
+    targetKbps := int64(float64(sourceKbps) * modifier)
+
+    // Clamp to reasonable bounds
+    if targetKbps < 500 { targetKbps = 500 }
+    if targetKbps > 15000 { targetKbps = 15000 }
+
+    return fmt.Sprintf("%dk", targetKbps)
+}
+```
+
+### UI Layout Decisions
+
+File browser layout structure:
+```
+[checkbox] [icon] [filename with ellipsis...] [metadata right-aligned]
+```
+
+CSS uses flexbox with `gap: 12px` for uniform spacing:
+```css
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+```
+
+## Bugs Fixed During Session
+
+1. **Badge Width Inconsistency**
+   - Status badges (RUNNING, COMPLETE, HARDWARE, SOFTWARE) had different widths
+   - Fixed with `min-width: 80px` and `text-align: center`
+
+2. **File Browser Text Alignment**
+   - Text was centered instead of left-aligned
+   - Fixed with `text-align: left` on `.file-item`
+
+3. **Multi-Select Not Working**
+   - Could only select one file at a time
+   - Added checkboxes to video files with proper event handling
+   - Added "Select All" checkbox in header
+
+4. **Broken File Browser Layout**
+   - After adding checkboxes, layout was misaligned
+   - Fixed by restructuring HTML elements and using proper flex classes
+   - Removed `justify-content: space-between`, used `gap` instead
+
+5. **Video Icon on Non-Video Files**
+   - All files showed video icon (🎬)
+   - Fixed icon logic: folders=📁, videos=🎬, other files=📄
+
+## Files Modified/Created
+
+### New Files
+- `internal/ffmpeg/hwaccel.go` - Hardware acceleration detection
+- `internal/ffmpeg/presets_test.go` - Tests for dynamic bitrate
+- `README.md` - Project documentation
+- `LICENSE` - MIT license
+- `.gitignore` - Git ignore rules
+
+### Modified Files
+- `internal/ffmpeg/presets.go` - Added dynamic bitrate calculation
+- `internal/ffmpeg/transcode.go` - Pass source bitrate to preset builder
+- `internal/jobs/job.go` - Added Bitrate, Encoder, IsHardware fields
+- `internal/jobs/queue.go` - Store bitrate/encoder in jobs
+- `internal/jobs/worker.go` - Pass bitrate to transcoder
+- `internal/api/handler.go` - Include encoder info in job responses
+- `web/templates/index.html` - Full UI overhaul with multi-select
+
+## Test Files Used
+
+Created test files with ffmpeg:
+```bash
+# High bitrate (10 Mbps)
+ffmpeg -f lavfi -i "mandelbrot=size=1920x1080:rate=30" -t 20 \
+  -c:v libx264 -b:v 10M testdata/high_bitrate.mp4
+
+# Medium bitrate (5 Mbps)
+ffmpeg -f lavfi -i "testsrc2=size=1920x1080:rate=30" -t 20 \
+  -c:v libx264 -b:v 5M testdata/medium_bitrate.mp4
+
+# Low bitrate (2 Mbps)
+ffmpeg -f lavfi -i "life=size=1920x1080:rate=30" -t 20 \
+  -c:v libx264 -b:v 2M testdata/low_bitrate.mp4
+```
+
+Also used Barry S04 episodes from `testdata/barry/` for real-world testing.
+
+## Running the App
+
+```bash
+# Build and run
+go build -o shrinkray ./cmd/shrinkray
+./shrinkray -media ./testdata
+
+# Or with go run
+go run ./cmd/shrinkray -media /path/to/media
+
+# Open browser
+open http://localhost:8080
+```
+
+## Known Issues / Future Work
+
+1. **UI is "Debug UI"** - Title says "Debug UI", should be polished for production
+2. **No config UI** - Settings are in YAML file only
+3. **No job history persistence** - Jobs cleared on restart (queue.json exists but not fully utilized)
+4. **No delete .old files** - After transcode, original.old files need manual cleanup
+5. **Estimate accuracy** - Space estimates are rough, could be improved with codec-specific models
+
+## Presets Configuration Reference
+
+Current presets in `internal/ffmpeg/presets.go`:
+
+| ID | Quality | HW Bitrate Modifier | SW CRF |
+|----|---------|---------------------|--------|
+| `compress` | standard | 0.5 (50%) | 22 |
+| `compress-hard` | smaller | 0.35 (35%) | 26 |
+| `1080p` | standard | 0.5 (50%) | 22 |
+| `720p` | standard | 0.5 (50%) | 22 |
+
+## API Reference
+
+```
+GET  /api/browse?path=...     - List directory
+POST /api/estimate            - Get estimates for paths
+GET  /api/presets             - List presets
+GET  /api/encoders            - List available encoders
+POST /api/jobs                - Create jobs
+GET  /api/jobs                - List all jobs
+GET  /api/jobs/:id            - Get single job
+DELETE /api/jobs/:id          - Cancel job
+POST /api/jobs/clear          - Clear completed jobs
+GET  /api/jobs/stream         - SSE stream for updates
+```
+
+## Environment
+
+- **OS**: macOS Darwin 24.6.0
+- **Go**: 1.22+
+- **FFmpeg**: With VideoToolbox support
+- **Hardware**: Apple Silicon (VideoToolbox available)
+
+## Commit History
+
+Initial commit: `c4d8dcc` - "Initial commit - Shrinkray video transcoding tool"
+
+---
+
+*End of development log for December 7-8, 2025 session*
