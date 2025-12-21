@@ -81,6 +81,18 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool) *http.ServeMux {
 			w.Header().Set("Cache-Control", "public, max-age=86400")
 			w.Write(content)
 		})
+
+		// Serve high-res icon (for Unraid, Docker Hub, etc.)
+		mux.HandleFunc("GET /icon.png", func(w http.ResponseWriter, r *http.Request) {
+			content, err := fs.ReadFile(staticSubFS, "icon.png")
+			if err != nil {
+				http.Error(w, "Not found", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			w.Write(content)
+		})
 	}
 
 	return mux
