@@ -820,6 +820,11 @@
             .main {
                 flex-direction: column;
                 overflow-y: auto;
+                align-items: stretch;
+            }
+
+            .browser-panel {
+                flex: none;
             }
 
             .file-list {
@@ -853,6 +858,7 @@
 
             .main {
                 padding: 16px;
+                gap: 16px;
             }
 
             .settings-panel {
@@ -994,7 +1000,7 @@
                         </div>
                     </div>
                     <div class="queue-footer">
-                        <button class="btn btn-secondary btn-sm" onclick="clearCompleted()" style="flex: 1">Clear Completed</button>
+                        <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
                     </div>
                 </div>
             </div>
@@ -1281,7 +1287,7 @@
             }
         }
 
-        async function clearCompleted() {
+        async function clearQueue() {
             try {
                 await fetch('/api/jobs/clear', { method: 'POST' });
                 refreshJobs();

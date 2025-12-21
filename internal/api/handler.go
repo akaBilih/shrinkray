@@ -193,12 +193,12 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
-// ClearCompleted handles POST /api/jobs/clear
-func (h *Handler) ClearCompleted(w http.ResponseWriter, r *http.Request) {
-	count := h.queue.ClearCompleted()
+// ClearQueue handles POST /api/jobs/clear
+func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
+	count := h.queue.Clear()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"cleared": count,
-		"message": fmt.Sprintf("Cleared %d completed jobs", count),
+		"message": fmt.Sprintf("Cleared %d jobs", count),
 	})
 }
 

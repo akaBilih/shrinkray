@@ -19,7 +19,7 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool) *http.ServeMux {
 	mux.HandleFunc("GET /api/jobs", h.ListJobs)
 	mux.HandleFunc("POST /api/jobs", h.CreateJobs)
 	mux.HandleFunc("GET /api/jobs/stream", h.JobStream)
-	mux.HandleFunc("POST /api/jobs/clear", h.ClearCompleted)
+	mux.HandleFunc("POST /api/jobs/clear", h.ClearQueue)
 	mux.HandleFunc("GET /api/jobs/{id}", h.GetJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.CancelJob)
 
@@ -98,7 +98,7 @@ func NewRouterWithoutStatic(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /api/jobs", h.ListJobs)
 	mux.HandleFunc("POST /api/jobs", h.CreateJobs)
 	mux.HandleFunc("GET /api/jobs/stream", h.JobStream)
-	mux.HandleFunc("POST /api/jobs/clear", h.ClearCompleted)
+	mux.HandleFunc("POST /api/jobs/clear", h.ClearQueue)
 	mux.HandleFunc("GET /api/jobs/{id}", h.GetJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.CancelJob)
 
