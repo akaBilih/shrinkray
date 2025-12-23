@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -187,9 +188,37 @@ func BuildTempPath(inputPath, tempDir string) string {
 	return filepath.Join(tempDir, tempName)
 }
 
+// copyFile copies a file from src to dst, preserving permissions.
+// Works across filesystems unlike os.Rename.
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return dstFile.Close()
+}
+
 // FinalizeTranscode handles the original file based on the configured behavior
-// If replace=true, deletes original and moves temp to final location
-// If replace=false (keep), renames original to .old and moves temp to final location
+// If replace=true, deletes original and copies temp to final location
+// If replace=false (keep), renames original to .old and copies temp to final location
+// Uses copy-then-delete instead of rename to support cross-filesystem moves.
 func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath string, err error) {
 	dir := filepath.Dir(inputPath)
 	base := filepath.Base(inputPath)
@@ -198,29 +227,31 @@ func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath stri
 	finalPath = filepath.Join(dir, name+".mkv")
 
 	if replace {
-		// Replace mode: delete original, move temp to final location
+		// Replace mode: delete original, copy temp to final location
 		if err := os.Remove(inputPath); err != nil {
 			return "", fmt.Errorf("failed to remove original file: %w", err)
 		}
 
-		if err := os.Rename(tempPath, finalPath); err != nil {
-			return "", fmt.Errorf("failed to move temp to final location: %w", err)
+		if err := copyFile(tempPath, finalPath); err != nil {
+			return "", fmt.Errorf("failed to copy temp to final location: %w", err)
 		}
 
+		os.Remove(tempPath)
 		return finalPath, nil
 	}
 
-	// Keep mode: rename original to .old, move temp to final location
+	// Keep mode: rename original to .old, copy temp to final location
 	oldPath := inputPath + ".old"
 	if err := os.Rename(inputPath, oldPath); err != nil {
 		return "", fmt.Errorf("failed to rename original to .old: %w", err)
 	}
 
-	if err := os.Rename(tempPath, finalPath); err != nil {
+	if err := copyFile(tempPath, finalPath); err != nil {
 		// Try to restore original
 		os.Rename(oldPath, inputPath)
-		return "", fmt.Errorf("failed to move temp to final location: %w", err)
+		return "", fmt.Errorf("failed to copy temp to final location: %w", err)
 	}
 
+	os.Remove(tempPath)
 	return finalPath, nil
 }
