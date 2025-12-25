@@ -39,7 +39,7 @@ For hardware acceleration, add the appropriate device:
 # Intel QSV / AMD VAAPI
 --device /dev/dri:/dev/dri
 
-# NVIDIA (requires Nvidia-Driver plugin on Unraid, or nvidia-container-toolkit elsewhere)
+# NVIDIA (requires Nvidia-Driver plugin on Unraid)
 --runtime=nvidia --gpus all
 ```
 
