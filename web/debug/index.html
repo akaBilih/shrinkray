@@ -316,6 +316,14 @@
         .settings-status.error {
             color: #ff3b30;
         }
+
+        .settings-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e5e5e5;
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -415,6 +423,7 @@
             </div>
         </div>
         <div id="settings-status" class="settings-status"></div>
+        <div class="settings-footer">Shrinkray v<span id="app-version"></span></div>
     </div>
 
     <div class="card">
@@ -808,6 +817,11 @@
                 const resp = await fetch('/api/config');
                 const config = await resp.json();
 
+                // Display version
+                if (config.version) {
+                    document.getElementById('app-version').textContent = config.version;
+                }
+
                 // Set original handling dropdown
                 const handlingSelect = document.getElementById('setting-original-handling');
                 handlingSelect.value = config.original_handling || 'replace';
@@ -816,7 +830,7 @@
                 const workersSelect = document.getElementById('setting-workers');
                 workersSelect.value = config.workers || 1;
 
-                log(`Settings loaded: original_handling=${config.original_handling}, workers=${config.workers}`);
+                log(`Settings loaded: version=${config.version}, original_handling=${config.original_handling}, workers=${config.workers}`);
             } catch (err) {
                 log(`Error loading settings: ${err.message}`);
             }

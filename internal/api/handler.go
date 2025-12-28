@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	shrinkray "github.com/gwlsn/shrinkray"
 	"github.com/gwlsn/shrinkray/internal/browse"
 	"github.com/gwlsn/shrinkray/internal/config"
 	"github.com/gwlsn/shrinkray/internal/ffmpeg"
@@ -210,6 +211,7 @@ func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	// Return a sanitized config (no sensitive paths exposed)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"version":               shrinkray.Version,
 		"media_path":            h.cfg.MediaPath,
 		"original_handling":     h.cfg.OriginalHandling,
 		"workers":               h.cfg.Workers,

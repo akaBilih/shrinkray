@@ -1,7 +1,8 @@
-media_path: ./testdata
+media_path: /Users/graysonwilson/Desktop
 temp_path: ""
-original_handling: replace
+original_handling: keep
 workers: 3
 ffmpeg_path: ffmpeg
 ffprobe_path: ffprobe
 queue_file: config/queue.json
+notify_on_complete: false
