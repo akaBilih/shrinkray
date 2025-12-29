@@ -18,8 +18,8 @@ A simple video transcoding tool for Unraid. Select a folder, pick a preset, and 
 docker run -d \
   --name shrinkray \
   -p 8080:8080 \
-  -e PUID=1000 \
-  -e PGID=1000 \
+  -e PUID=99 \
+  -e PGID=100 \
   -v /path/to/config:/config \
   -v /path/to/media:/media \
   ghcr.io/gwlsn/shrinkray:latest
