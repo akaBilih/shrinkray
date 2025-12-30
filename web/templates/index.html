@@ -1356,6 +1356,92 @@
             min-width: 100px;
         }
 
+        /* Completed Jobs Section - compact collapsible view */
+        .completed-section {
+            border-top: 1px solid var(--border);
+            padding: 12px;
+            background: var(--bg-tertiary);
+        }
+
+        .completed-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 4px 0;
+            user-select: none;
+        }
+
+        .completed-header:hover {
+            color: var(--accent);
+        }
+
+        .completed-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .completed-count {
+            background: var(--success-light);
+            color: var(--success);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .completed-toggle {
+            color: var(--text-tertiary);
+            transition: transform var(--transition-fast);
+        }
+
+        .completed-toggle.expanded {
+            transform: rotate(180deg);
+        }
+
+        .completed-list {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height var(--transition-normal);
+        }
+
+        .completed-list.expanded {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .completed-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8125rem;
+        }
+
+        .completed-item:last-child {
+            border-bottom: none;
+        }
+
+        .completed-item-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 12px;
+        }
+
+        .completed-item-saved {
+            color: var(--success);
+            font-weight: 500;
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+
         /* Virtual Scrolling - Only visible items are rendered to DOM */
         .virtual-scroll-container {
             position: relative;
@@ -1519,6 +1605,19 @@
                             <div>No jobs in queue</div>
                             <div style="font-size: 0.8125rem; margin-top: 4px; color: var(--text-tertiary)">Select files and start transcoding</div>
                         </div>
+                    </div>
+                    <!-- Completed Jobs Section -->
+                    <div class="completed-section" id="completed-section" style="display: none;">
+                        <div class="completed-header" onclick="toggleCompletedSection()">
+                            <div class="completed-title">
+                                <span>Recently Completed</span>
+                                <span class="completed-count" id="completed-count">0</span>
+                            </div>
+                            <svg class="completed-toggle" id="completed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="completed-list" id="completed-list"></div>
                     </div>
                     <div class="queue-footer">
                         <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
@@ -1808,6 +1907,18 @@
             }
             jobMap.set(job.id, job);
             addToStatusIndex(job);
+        }
+
+        function removeJobFromVirtualState(jobId) {
+            const job = jobMap.get(jobId);
+            if (job) {
+                removeFromStatusIndex(job);
+                jobMap.delete(jobId);
+                const idx = jobOrder.indexOf(jobId);
+                if (idx >= 0) {
+                    jobOrder.splice(idx, 1);
+                }
+            }
         }
 
         function addToStatusIndex(job) {
@@ -2702,7 +2813,22 @@
                 }
             }
 
-            if (virtualScrollEnabled) {
+            // If job completed, move it to the completed section
+            if (job.status === 'complete') {
+                // Remove from main queue list
+                const safeId = escapeCssSelector(job.id);
+                const el = document.querySelector(`.job-item[data-job-id="${safeId}"]`);
+                if (el) {
+                    el.remove();
+                }
+                // Remove from virtual scroll state if enabled
+                if (virtualScrollEnabled) {
+                    removeJobFromVirtualState(job.id);
+                }
+                // Update completed section
+                const completedJobs = cachedJobs.filter(j => j.status === 'complete');
+                updateCompletedSection(completedJobs);
+            } else if (virtualScrollEnabled) {
                 // Virtual scroll: only update if visible
                 updateJobInView(job);
             } else {
@@ -2721,15 +2847,22 @@
             const container = document.getElementById('queue-list');
             cachedJobs = jobs || [];
 
-            // Update virtual scroll state
+            // Separate completed jobs from active queue
+            const completedJobs = cachedJobs.filter(j => j.status === 'complete');
+            const activeJobs = cachedJobs.filter(j => j.status !== 'complete');
+
+            // Update completed section (compact view)
+            updateCompletedSection(completedJobs);
+
+            // Update virtual scroll state (only for active jobs)
             if (virtualScrollEnabled) {
                 clearVirtualState();
-                for (const job of cachedJobs) {
+                for (const job of activeJobs) {
                     addJobToVirtualState(job);
                 }
             }
 
-            if (!jobs || jobs.length === 0) {
+            if (activeJobs.length === 0) {
                 container.innerHTML = `
                     <div class="queue-empty">
                         <div class="queue-empty-icon">
@@ -2753,8 +2886,8 @@
                 updateVisibleRange();
                 renderVirtualJobs();
             } else {
-                // Legacy: render all jobs
-                container.innerHTML = jobs.map(job => renderJobHtml(job)).join('');
+                // Legacy: render all jobs (only active, not completed)
+                container.innerHTML = activeJobs.map(job => renderJobHtml(job)).join('');
             }
             updateActivePanel();
         }
@@ -2768,6 +2901,55 @@
             document.getElementById('stat-running').textContent = stats.running;
             const saved = Math.max(0, stats.total_saved || 0);
             document.getElementById('stat-saved').textContent = formatBytes(saved);
+        }
+
+        // ========================================
+        // Completed Jobs Section
+        // ========================================
+
+        function toggleCompletedSection() {
+            const list = document.getElementById('completed-list');
+            const toggle = document.getElementById('completed-toggle');
+            const isExpanded = list.classList.contains('expanded');
+
+            if (isExpanded) {
+                list.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+            } else {
+                list.classList.add('expanded');
+                toggle.classList.add('expanded');
+            }
+        }
+
+        function updateCompletedSection(completedJobs) {
+            const section = document.getElementById('completed-section');
+            const countEl = document.getElementById('completed-count');
+            const listEl = document.getElementById('completed-list');
+
+            if (!completedJobs || completedJobs.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            countEl.textContent = completedJobs.length;
+
+            // Show most recent 50 completed jobs (newest first)
+            const recentJobs = completedJobs
+                .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+                .slice(0, 50);
+
+            listEl.innerHTML = recentJobs.map(job => {
+                const filename = job.input_path.split('/').pop();
+                const safeFilename = escapeHtml(filename);
+                const savedText = job.space_saved > 0 ? formatBytes(job.space_saved) : '—';
+                return `
+                    <div class="completed-item">
+                        <span class="completed-item-name" title="${escapeHtml(job.input_path)}">${safeFilename}</span>
+                        <span class="completed-item-saved">-${savedText}</span>
+                    </div>
+                `;
+            }).join('');
         }
 
         function updateActivePanel() {
