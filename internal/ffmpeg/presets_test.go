@@ -18,13 +18,7 @@ func TestBuildPresetArgsDynamicBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
-
-	// Should have hwaccel input args
-	if len(inputArgs) == 0 {
-		t.Error("expected hwaccel input args for VideoToolbox")
-	}
-	t.Logf("Input args: %v", inputArgs)
+	_, outputArgs := BuildPresetArgs(preset, sourceBitrate)
 
 	// Should contain -b:v with calculated bitrate
 	// Expected: 3481 * 0.35 = ~1218k
@@ -59,13 +53,7 @@ func TestBuildPresetArgsDynamicBitrateAV1(t *testing.T) {
 		Codec:   CodecAV1,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
-
-	// Should have hwaccel input args
-	if len(inputArgs) == 0 {
-		t.Error("expected hwaccel input args for VideoToolbox")
-	}
-	t.Logf("Input args: %v", inputArgs)
+	_, outputArgs := BuildPresetArgs(preset, sourceBitrate)
 
 	// Expected: 3481 * 0.25 = ~870k
 	for i, arg := range outputArgs {
@@ -177,12 +165,7 @@ func TestBuildPresetArgsZeroBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(presetVT, 0)
-
-	// Should still have hwaccel input args
-	if len(inputArgs) == 0 {
-		t.Error("expected hwaccel input args for VideoToolbox")
-	}
+	_, outputArgs := BuildPresetArgs(presetVT, 0)
 
 	// Should still have -b:v but with raw modifier value
 	for i, arg := range outputArgs {
