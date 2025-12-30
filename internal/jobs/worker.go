@@ -290,6 +290,10 @@ func (w *Worker) processJob(job *Job) {
 			w.id, job.ID, preset.Encoder, preset.Codec, job.InputPath)
 	}
 
+	// Log duration for debugging progress issues
+	log.Printf("[worker-%d] Job %s duration: %dms (%.1f minutes)",
+		w.id, job.ID, job.Duration, float64(job.Duration)/60000.0)
+
 	// Build temp output path
 	tempDir := w.cfg.GetTempDir(job.InputPath)
 	tempPath := ffmpeg.BuildTempPath(job.InputPath, tempDir)
