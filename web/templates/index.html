@@ -2686,11 +2686,14 @@
         function renderJobHtml(job) {
             const filename = job.input_path.split('/').pop();
             const isInitializing = job.status === 'running' && job.progress === 0 && job.speed === 0;
-            const statusClass = isInitializing ? 'initializing' : job.status;
-            const statusLabel = isInitializing ? 'Initializing' : job.status.charAt(0).toUpperCase() + job.status.slice(1);
+            const isPendingProbe = job.status === 'pending_probe';
+            const statusClass = isInitializing ? 'initializing' : (isPendingProbe ? 'pending' : job.status);
+            const statusLabel = isInitializing ? 'Initializing' : (isPendingProbe ? 'Scanning' : job.status.charAt(0).toUpperCase() + job.status.slice(1));
 
             let detailsHtml = '';
-            if (job.status === 'running') {
+            if (isPendingProbe) {
+                detailsHtml = '<span class="job-detail">Waiting to scan...</span>';
+            } else if (job.status === 'running') {
                 if (isInitializing) {
                     detailsHtml = '<span class="job-detail">Starting encoder...</span>';
                 } else {
@@ -2733,7 +2736,7 @@
                     <div class="job-details">${detailsHtml}</div>
                     ${job.status === 'failed' ? `<div class="job-error">${safeError}</div>` : ''}
                     ${job.status === 'failed' ? renderErrorHelper(job) : ''}
-                    ${job.status === 'pending' || job.status === 'running' ? `
+                    ${job.status === 'pending' || job.status === 'pending_probe' || job.status === 'running' ? `
                         <div class="job-actions">
                             <button class="btn btn-secondary btn-sm" onclick="cancelJob('${safeId}')">Cancel</button>
                         </div>
@@ -3299,6 +3302,9 @@
                 } else if (data.type === 'added' && data.job) {
                     // Single job added (backwards compatibility)
                     handleJobAdded(data.job);
+                } else if (data.type === 'probed' && data.job) {
+                    // Job probed: pending_probe → pending, update with probe data
+                    handleJobStatusChange(data.job);
                 } else if ((data.type === 'started' || data.type === 'complete' || data.type === 'failed' || data.type === 'cancelled') && data.job) {
                     // Performance: Update single job instead of full refresh
                     handleJobStatusChange(data.job);
