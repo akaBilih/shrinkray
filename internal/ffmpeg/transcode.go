@@ -254,9 +254,17 @@ func (t *Transcoder) Transcode(
 		scanner := bufio.NewScanner(stdout)
 		var currentProgress Progress
 		progressUpdateCount := 0
+		lineCount := 0
 
 		for scanner.Scan() {
 			line := scanner.Text()
+			lineCount++
+
+			// Log first 20 lines to see what ffmpeg is actually outputting
+			if lineCount <= 20 {
+				log.Printf("[transcode] Line %d: %s", lineCount, line)
+			}
+
 			// Progress output format: key=value
 			if idx := strings.Index(line, "="); idx > 0 {
 				key := line[:idx]
@@ -336,6 +344,7 @@ func (t *Transcoder) Transcode(
 		if err := scanner.Err(); err != nil {
 			log.Printf("[transcode] Scanner error: %v", err)
 		}
+		log.Printf("[transcode] Scanner finished after %d lines, %d progress updates", lineCount, progressUpdateCount)
 	}()
 
 	// Wait for ffmpeg to complete
