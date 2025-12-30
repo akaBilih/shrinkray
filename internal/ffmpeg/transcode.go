@@ -253,6 +253,7 @@ func (t *Transcoder) Transcode(
 		defer close(progressCh)
 		scanner := bufio.NewScanner(stdout)
 		var currentProgress Progress
+		progressUpdateCount := 0
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -269,6 +270,10 @@ func (t *Transcoder) Transcode(
 				case "total_size":
 					currentProgress.Size, _ = strconv.ParseInt(value, 10, 64)
 				case "out_time_us":
+					// Use out_time_us exclusively - it's the most precise
+					// Don't parse out_time_ms or out_time because they come AFTER out_time_us
+					// and out_time can be "N/A" for complex files, which would overwrite
+					// the valid microseconds value with 0
 					us, _ := strconv.ParseInt(value, 10, 64)
 					currentProgress.Time = time.Duration(us) * time.Microsecond
 				case "bitrate":
@@ -286,6 +291,7 @@ func (t *Transcoder) Transcode(
 				case "progress":
 					// "continue" or "end"
 					if value == "continue" || value == "end" {
+						progressUpdateCount++
 						// Calculate percent and ETA
 						if duration > 0 {
 							currentProgress.Percent = float64(currentProgress.Time) / float64(duration) * 100
@@ -298,16 +304,25 @@ func (t *Transcoder) Transcode(
 								remaining := duration - currentProgress.Time
 								currentProgress.ETA = time.Duration(float64(remaining) / currentProgress.Speed)
 							}
+						} else {
+							// Log when duration is 0 - this would cause 0% progress
+							if progressUpdateCount == 1 {
+								log.Printf("[transcode] Warning: duration is 0, progress will always be 0%%")
+							}
 						}
 
 						// Send progress update (non-blocking)
 						select {
 						case progressCh <- currentProgress:
 						default:
+							// Channel full, skip this update
 						}
 					}
 				}
 			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("[transcode] Scanner error: %v", err)
 		}
 	}()
 
