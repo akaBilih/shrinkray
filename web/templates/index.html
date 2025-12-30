@@ -1324,6 +1324,22 @@
         let eventSource = null;
         let cachedJobs = [];
 
+        // Escape HTML to prevent XSS
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // Escape for CSS selector (job IDs in querySelector)
+        function escapeCssSelector(str) {
+            return String(str).replace(/["\\]/g, '\\$&');
+        }
+
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
             if (bytes < 0) return '0 B';
@@ -1674,10 +1690,15 @@
                     `;
                 }
 
+                const safeId = escapeHtml(job.id);
+                const safePath = escapeHtml(job.input_path);
+                const safeFilename = escapeHtml(filename);
+                const safeError = escapeHtml(job.error);
+
                 return `
-                    <div class="job-item" data-job-id="${job.id}">
+                    <div class="job-item" data-job-id="${safeId}">
                         <div class="job-header">
-                            <span class="job-name" title="${job.input_path}">${filename}</span>
+                            <span class="job-name" title="${safePath}">${safeFilename}</span>
                             <div class="job-badges">
                                 <span class="job-badge ${job.is_hardware ? 'hardware' : 'software'}">${job.is_hardware ? 'HW' : 'SW'}</span>
                                 <span class="job-badge ${statusClass}">${statusLabel}</span>
@@ -1686,20 +1707,20 @@
                         ${job.status === 'running' ? `
                             <div class="job-progress">
                                 <div class="progress-bar">
-                                    <div class="progress-fill ${isInitializing ? 'initializing' : ''}" style="width: ${isInitializing ? 100 : job.progress}%"></div>
+                                    <div class="progress-fill ${isInitializing ? 'initializing' : ''}" style="width: ${isInitializing ? 0 : job.progress}%"></div>
                                 </div>
                             </div>
                         ` : ''}
                         <div class="job-details">${detailsHtml}</div>
-                        ${job.status === 'failed' ? `<div class="job-error">${job.error}</div>` : ''}
+                        ${job.status === 'failed' ? `<div class="job-error">${safeError}</div>` : ''}
                         ${job.status === 'pending' || job.status === 'running' ? `
                             <div class="job-actions">
-                                <button class="btn btn-secondary btn-sm" onclick="cancelJob('${job.id}')">Cancel</button>
+                                <button class="btn btn-secondary btn-sm" onclick="cancelJob('${safeId}')">Cancel</button>
                             </div>
                         ` : ''}
                         ${job.status === 'failed' ? `
                             <div class="job-actions">
-                                <button class="btn btn-secondary btn-sm" onclick="retryJob('${job.id}')">Retry</button>
+                                <button class="btn btn-secondary btn-sm" onclick="retryJob('${safeId}')">Retry</button>
                             </div>
                         ` : ''}
                     </div>
@@ -1741,6 +1762,10 @@
                 const statusClass = isInitializing ? 'initializing' : 'running';
                 const statusLabel = isInitializing ? 'Initializing' : 'Running';
 
+                const safeId = escapeHtml(activeJob.id);
+                const safePath = escapeHtml(activeJob.input_path);
+                const safeFilename = escapeHtml(filename);
+
                 let detailsHtml = '';
                 if (isInitializing) {
                     detailsHtml = '<span class="job-detail">Starting encoder...</span>';
@@ -1748,14 +1773,14 @@
                     detailsHtml = `
                         <span class="job-detail"><span class="job-detail-value">${activeJob.progress.toFixed(1)}%</span></span>
                         <span class="job-detail"><span class="job-detail-value">${activeJob.speed.toFixed(2)}x</span></span>
-                        <span class="job-detail">ETA: <span class="job-detail-value">${activeJob.eta || '...'}</span></span>
+                        <span class="job-detail">ETA: <span class="job-detail-value">${escapeHtml(activeJob.eta) || '...'}</span></span>
                     `;
                 }
 
                 nowProcessingContent.innerHTML = `
                     <div class="active-job">
                         <div class="active-job-header">
-                            <span class="active-job-name" title="${activeJob.input_path}">${filename}</span>
+                            <span class="active-job-name" title="${safePath}">${safeFilename}</span>
                             <div class="job-badges">
                                 <span class="job-badge ${activeJob.is_hardware ? 'hardware' : 'software'}">${activeJob.is_hardware ? 'HW' : 'SW'}</span>
                                 <span class="job-badge ${statusClass}">${statusLabel}</span>
@@ -1763,12 +1788,12 @@
                         </div>
                         <div class="job-progress">
                             <div class="progress-bar">
-                                <div class="progress-fill ${isInitializing ? 'initializing' : ''}" style="width: ${isInitializing ? 100 : activeJob.progress}%"></div>
+                                <div class="progress-fill ${isInitializing ? 'initializing' : ''}" style="width: ${isInitializing ? 0 : activeJob.progress}%"></div>
                             </div>
                         </div>
                         <div class="active-job-details">${detailsHtml}</div>
                         <div class="job-actions">
-                            <button class="btn btn-secondary btn-sm" onclick="cancelJob('${activeJob.id}')">Cancel</button>
+                            <button class="btn btn-secondary btn-sm" onclick="cancelJob('${safeId}')">Cancel</button>
                         </div>
                     </div>
                 `;
@@ -1782,10 +1807,13 @@
                 upNextList.innerHTML = pendingJobs.map(job => {
                     const filename = job.input_path.split('/').pop();
                     const presetName = job.preset_id || 'default';
+                    const safePath = escapeHtml(job.input_path);
+                    const safeFilename = escapeHtml(filename);
+                    const safePreset = escapeHtml(presetName);
                     return `
                         <div class="up-next-item">
-                            <span class="up-next-name" title="${job.input_path}">${filename}</span>
-                            <span class="up-next-preset">${presetName}</span>
+                            <span class="up-next-name" title="${safePath}">${safeFilename}</span>
+                            <span class="up-next-preset">${safePreset}</span>
                         </div>
                     `;
                 }).join('');
@@ -1796,50 +1824,55 @@
 
         // Targeted update for progress events only - avoids full DOM rebuild
         function updateActiveJobProgress(jobData) {
+            const isInitializing = jobData.progress === 0 && jobData.speed === 0;
+            const safeEta = escapeHtml(jobData.eta) || '...';
+
             // Update active panel
             const nowProcessingContent = document.getElementById('now-processing-content');
-            const activeJobEl = nowProcessingContent.querySelector('.active-job');
-            if (activeJobEl) {
-                const isInitializing = jobData.progress === 0 && jobData.speed === 0;
+            const activeJobEl = nowProcessingContent ? nowProcessingContent.querySelector('.active-job') : null;
 
-                // Update progress bar
-                const progressFill = activeJobEl.querySelector('.progress-fill');
-                if (progressFill) {
-                    progressFill.style.width = (isInitializing ? 100 : jobData.progress) + '%';
-                    progressFill.className = 'progress-fill' + (isInitializing ? ' initializing' : '');
-                }
+            // If active panel doesn't exist yet, fall back to full refresh
+            if (!activeJobEl) {
+                refreshJobs();
+                return;
+            }
 
-                // Update details
-                const detailsEl = activeJobEl.querySelector('.active-job-details');
-                if (detailsEl) {
-                    if (isInitializing) {
-                        detailsEl.innerHTML = '<span class="job-detail">Starting encoder...</span>';
-                    } else {
-                        detailsEl.innerHTML = `
-                            <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
-                            <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
-                            <span class="job-detail">ETA: <span class="job-detail-value">${jobData.eta || '...'}</span></span>
-                        `;
-                    }
-                }
+            // Update progress bar in active panel
+            const activeFill = activeJobEl.querySelector('.progress-fill');
+            if (activeFill) {
+                activeFill.style.width = (isInitializing ? 0 : jobData.progress) + '%';
+                activeFill.className = 'progress-fill' + (isInitializing ? ' initializing' : '');
+            }
 
-                // Update status badge if transitioning from initializing
-                const statusBadge = activeJobEl.querySelector('.job-badge.running, .job-badge.initializing');
-                if (statusBadge) {
-                    statusBadge.className = 'job-badge ' + (isInitializing ? 'initializing' : 'running');
-                    statusBadge.textContent = isInitializing ? 'Initializing' : 'Running';
+            // Update details in active panel
+            const activeDetails = activeJobEl.querySelector('.active-job-details');
+            if (activeDetails) {
+                if (isInitializing) {
+                    activeDetails.innerHTML = '<span class="job-detail">Starting encoder...</span>';
+                } else {
+                    activeDetails.innerHTML = `
+                        <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
+                        <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
+                        <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
+                    `;
                 }
             }
 
-            // Update the corresponding row in the queue list
-            const queueRow = document.querySelector(`.job-item[data-job-id="${jobData.id}"]`);
-            if (queueRow) {
-                const isInitializing = jobData.progress === 0 && jobData.speed === 0;
+            // Update status badge in active panel
+            const activeBadge = activeJobEl.querySelector('.job-badge.running, .job-badge.initializing');
+            if (activeBadge) {
+                activeBadge.className = 'job-badge ' + (isInitializing ? 'initializing' : 'running');
+                activeBadge.textContent = isInitializing ? 'Initializing' : 'Running';
+            }
 
+            // Update the corresponding row in the queue list (use escaped selector)
+            const safeSelector = `.job-item[data-job-id="${escapeCssSelector(jobData.id)}"]`;
+            const queueRow = document.querySelector(safeSelector);
+            if (queueRow) {
                 // Update progress bar
                 const progressFill = queueRow.querySelector('.progress-fill');
                 if (progressFill) {
-                    progressFill.style.width = (isInitializing ? 100 : jobData.progress) + '%';
+                    progressFill.style.width = (isInitializing ? 0 : jobData.progress) + '%';
                     progressFill.className = 'progress-fill' + (isInitializing ? ' initializing' : '');
                 }
 
@@ -1852,7 +1885,7 @@
                         detailsEl.innerHTML = `
                             <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
                             <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
-                            <span class="job-detail">ETA: <span class="job-detail-value">${jobData.eta || '...'}</span></span>
+                            <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
                         `;
                     }
                 }
