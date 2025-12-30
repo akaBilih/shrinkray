@@ -145,24 +145,25 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64) (inputArgs []string, o
 	}
 
 	// Input args: hardware acceleration for decoding
-	// DISABLED: Hardware decoding can cause hangs in some container environments.
-	// TODO: Make this configurable. For now, use CPU decode + GPU encode.
-	// for _, arg := range config.hwaccelArgs {
-	// 	if arg == "" && len(inputArgs) > 0 && inputArgs[len(inputArgs)-1] == "-vaapi_device" {
-	// 		arg = GetVAAPIDevice()
-	// 	}
-	// 	inputArgs = append(inputArgs, arg)
-	// }
-	_ = config.hwaccelArgs // Silence unused warning
+	for _, arg := range config.hwaccelArgs {
+		// Fill in VAAPI device path dynamically
+		if arg == "" && len(inputArgs) > 0 && inputArgs[len(inputArgs)-1] == "-vaapi_device" {
+			arg = GetVAAPIDevice()
+		}
+		inputArgs = append(inputArgs, arg)
+	}
 
 	// Output args
 	outputArgs = []string{}
 
 	// Add scaling filter if needed
-	// Use CPU scale since hardware decoding is disabled
 	if preset.MaxHeight > 0 {
+		scaleFilter := config.scaleFilter
+		if scaleFilter == "" {
+			scaleFilter = "scale"
+		}
 		outputArgs = append(outputArgs,
-			"-vf", fmt.Sprintf("scale=-2:'min(ih,%d)'", preset.MaxHeight),
+			"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
 		)
 	}
 
