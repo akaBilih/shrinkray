@@ -1891,6 +1891,22 @@
                     'Re-encode from the original source if available.',
                 ],
             },
+            {
+                id: 'output_larger',
+                pattern: /larger than original|is larger than/i,
+                summary: 'The transcoded file would be larger than the original.',
+                confidence: 'high',
+                causes: [
+                    'The source is already well-compressed or uses an efficient codec.',
+                    'The file is very short, so codec overhead exceeds any compression gains.',
+                    'The source bitrate is already lower than the target preset.',
+                ],
+                steps: [
+                    'This is expected behavior - Shrinkray skips files that would grow larger.',
+                    'No action needed. The original file is already optimal for its size.',
+                    'If you still want to convert, consider using a lower quality preset.',
+                ],
+            },
         ];
 
         // Analyze error and return structured diagnosis
