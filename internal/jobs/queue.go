@@ -606,6 +606,9 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 		return fmt.Errorf("job not found: %s", id)
 	}
 
+	wasComplete := job.Status == StatusComplete
+	previousSaved := job.SpaceSaved
+
 	job.Status = StatusComplete
 	job.Progress = 100
 	job.OutputPath = outputPath
@@ -615,6 +618,11 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 	job.TranscodeTime = int64(job.CompletedAt.Sub(job.StartedAt).Seconds())
 	job.TempPath = "" // Clear temp path
 	q.recordProcessedPathLocked(job.InputPath, job.CompletedAt)
+	q.totalSaved += job.SpaceSaved
+
+	if wasComplete {
+		q.totalSaved -= previousSaved
+	}
 	q.totalSaved += job.SpaceSaved
 
 	if err := q.save(); err != nil {
@@ -830,7 +838,7 @@ func (q *Queue) Stats() Stats {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
-	var stats Stats
+	stats := Stats{TotalSaved: q.totalSaved}
 	for _, job := range q.jobs {
 		stats.Total++
 		switch job.Status {
