@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -94,10 +95,24 @@ type Config struct {
 
 // AuthConfig configures authentication providers.
 type AuthConfig struct {
+	// Enabled controls whether authentication is required.
+	Enabled bool `yaml:"enabled"`
 	// Provider selects the auth provider name.
 	Provider string `yaml:"provider"`
+	// Secret signs session cookies.
+	Secret string `yaml:"secret"`
 	// BypassPaths lists endpoints that bypass auth enforcement.
 	BypassPaths []string `yaml:"bypass_paths"`
+	// Password configures password-based auth.
+	Password PasswordAuthConfig `yaml:"password"`
+}
+
+// PasswordAuthConfig configures password auth.
+type PasswordAuthConfig struct {
+	// Users maps usernames to password hashes.
+	Users map[string]string `yaml:"users"`
+	// HashAlgo specifies the expected password hash algorithm.
+	HashAlgo string `yaml:"hash_algo"`
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -113,7 +128,9 @@ func DefaultConfig() *Config {
 		NtfyServer:       "https://ntfy.sh",
 		Features:         DefaultFeatureFlags(),
 		Auth: AuthConfig{
+			Enabled:  false,
 			Provider: "noop",
+			Password: PasswordAuthConfig{HashAlgo: "auto"},
 		},
 	}
 }
@@ -127,6 +144,7 @@ func Load(path string) (*Config, error) {
 		if os.IsNotExist(err) {
 			// No config file - use defaults
 			applyFeatureFlagEnvOverrides(cfg)
+			applyAuthEnvOverrides(cfg)
 			return cfg, nil
 		}
 		return nil, err
@@ -150,8 +168,59 @@ func Load(path string) (*Config, error) {
 	// Apply environment variable overrides for feature flags
 	// This allows toggling features without modifying config files
 	applyFeatureFlagEnvOverrides(cfg)
+	applyAuthEnvOverrides(cfg)
 
 	return cfg, nil
+}
+
+func applyAuthEnvOverrides(cfg *Config) {
+	if v := os.Getenv("SHRINKRAY_AUTH_ENABLED"); v != "" {
+		cfg.Auth.Enabled = envBool(v)
+	}
+	if v := os.Getenv("SHRINKRAY_AUTH_PROVIDER"); v != "" {
+		cfg.Auth.Provider = v
+	}
+	if v := os.Getenv("SHRINKRAY_AUTH_SECRET"); v != "" {
+		cfg.Auth.Secret = v
+	}
+	if v := os.Getenv("SHRINKRAY_AUTH_BYPASS_PATHS"); v != "" {
+		cfg.Auth.BypassPaths = splitCommaList(v)
+	}
+	if v := os.Getenv("SHRINKRAY_AUTH_HASH_ALGO"); v != "" {
+		cfg.Auth.Password.HashAlgo = v
+	}
+	if v := os.Getenv("SHRINKRAY_AUTH_USERS"); v != "" {
+		cfg.Auth.Password.Users = parseUsersEnv(v)
+	}
+}
+
+func splitCommaList(value string) []string {
+	parts := []string{}
+	for _, item := range strings.Split(value, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		parts = append(parts, item)
+	}
+	return parts
+}
+
+func parseUsersEnv(value string) map[string]string {
+	users := make(map[string]string)
+	for _, entry := range splitCommaList(value) {
+		parts := strings.SplitN(entry, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		username := strings.TrimSpace(parts[0])
+		hash := strings.TrimSpace(parts[1])
+		if username == "" || hash == "" {
+			continue
+		}
+		users[username] = hash
+	}
+	return users
 }
 
 // applyFeatureFlagEnvOverrides checks environment variables for feature flag overrides
