@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -254,7 +255,21 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 
 // ClearQueue handles POST /api/jobs/clear
 func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
-	count := h.queue.Clear()
+	type clearQueueRequest struct {
+		IncludeCompleted *bool `json:"include_completed"`
+	}
+
+	includeCompleted := true
+	var req clearQueueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.IncludeCompleted != nil {
+		includeCompleted = *req.IncludeCompleted
+	}
+
+	count := h.queue.Clear(includeCompleted)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"cleared": count,
 		"message": fmt.Sprintf("Cleared %d jobs", count),

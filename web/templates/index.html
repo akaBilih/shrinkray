@@ -1455,6 +1455,26 @@
             margin-bottom: 24px;
         }
 
+        .modal-options {
+            margin: -8px 0 24px;
+            display: none;
+        }
+
+        .modal-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .modal-option input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
         .modal-actions {
             display: flex;
             gap: 12px;
@@ -1910,6 +1930,12 @@
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-title" id="confirm-modal-title">Confirm</div>
             <div class="modal-message" id="confirm-modal-message"></div>
+            <div class="modal-options" id="confirm-modal-options">
+                <label class="modal-option" for="confirm-modal-remove-completed">
+                    <input type="checkbox" id="confirm-modal-remove-completed" checked>
+                    <span>Also remove recently completed jobs</span>
+                </label>
+            </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
                 <button class="btn btn-primary" id="confirm-modal-action">Confirm</button>
@@ -2973,23 +2999,38 @@
                 'Clear Queue',
                 'This will remove all non-active jobs from the queue (including pending jobs). Your active jobs will not be affected.',
                 async () => {
+                    const removeCompleted = document.getElementById('confirm-modal-remove-completed').checked;
                     try {
-                        await fetch('/api/jobs/clear', { method: 'POST' });
+                        await fetch('/api/jobs/clear', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ include_completed: removeCompleted })
+                        });
                         refreshJobs();
                     } catch (err) {
                         console.error('Clear error:', err);
                     }
-                }
+                },
+                { showRemoveCompletedToggle: true, removeCompletedDefault: true }
             );
         }
 
         // Confirm Modal
         let confirmCallback = null;
 
-        function showConfirmModal(title, message, onConfirm) {
+        function showConfirmModal(title, message, onConfirm, options = {}) {
             document.getElementById('confirm-modal-title').textContent = title;
             document.getElementById('confirm-modal-message').textContent = message;
             confirmCallback = onConfirm;
+            const optionsEl = document.getElementById('confirm-modal-options');
+            const removeCompletedEl = document.getElementById('confirm-modal-remove-completed');
+            if (options.showRemoveCompletedToggle) {
+                optionsEl.style.display = 'block';
+                removeCompletedEl.checked = options.removeCompletedDefault !== false;
+            } else {
+                optionsEl.style.display = 'none';
+                removeCompletedEl.checked = true;
+            }
             document.getElementById('confirm-modal').classList.add('active');
         }
 
