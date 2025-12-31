@@ -48,7 +48,7 @@ func NewQueue(filePath string) (*Queue, error) {
 
 // persistenceData is the structure saved to disk
 type persistenceData struct {
-	Jobs  []*Job `json:"jobs"`
+	Jobs  []*Job   `json:"jobs"`
 	Order []string `json:"order"`
 }
 
@@ -191,8 +191,8 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string) ([]*J
 	q.mu.Lock()
 
 	allJobs := make([]*Job, 0, len(probes))
-	addedJobs := make([]*Job, 0, len(probes))   // Jobs successfully added (pending)
-	skippedJobs := make([]*Job, 0)               // Jobs that failed skip-reason check
+	addedJobs := make([]*Job, 0, len(probes)) // Jobs successfully added (pending)
+	skippedJobs := make([]*Job, 0)            // Jobs that failed skip-reason check
 
 	preset := ffmpeg.GetPreset(presetID)
 	encoder := string(ffmpeg.HWAccelNone)
@@ -284,8 +284,8 @@ func (q *Queue) AddWithoutProbe(inputPath string, presetID string, fileSize int6
 		IsHardware: isHardware,
 		Status:     StatusPendingProbe, // Will be probed when worker picks it up
 		InputSize:  fileSize,           // File size is known from directory listing
-		Duration:   0,                   // Will be populated after probe
-		Bitrate:    0,                   // Will be populated after probe
+		Duration:   0,                  // Will be populated after probe
+		Bitrate:    0,                  // Will be populated after probe
 		CreatedAt:  time.Now(),
 	}
 
@@ -666,9 +666,10 @@ func (q *Queue) CancelJob(id string) error {
 	return nil
 }
 
-// Clear removes all non-running jobs from the queue (pending, completed, failed, cancelled)
-// Only running jobs are kept.
-func (q *Queue) Clear() int {
+// Clear removes all non-running jobs from the queue.
+// If includeCompleted is false, completed jobs are kept.
+// Only running jobs are always kept.
+func (q *Queue) Clear(includeCompleted bool) int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -679,8 +680,8 @@ func (q *Queue) Clear() int {
 		if !ok {
 			continue
 		}
-		if job.Status == StatusRunning {
-			// Keep only running jobs
+		if job.Status == StatusRunning || (!includeCompleted && job.Status == StatusComplete) {
+			// Keep running jobs (and completed if requested)
 			newOrder = append(newOrder, id)
 		} else {
 			delete(q.jobs, id)
