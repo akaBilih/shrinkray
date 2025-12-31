@@ -19,6 +19,7 @@ const (
 	HWAccelNone         HWAccel = "none"         // Software encoding
 	HWAccelVideoToolbox HWAccel = "videotoolbox" // Apple Silicon / Intel Mac
 	HWAccelNVENC        HWAccel = "nvenc"        // NVIDIA GPU
+	HWAccelAMF          HWAccel = "amf"          // AMD GPU (AMF, Windows)
 	HWAccelQSV          HWAccel = "qsv"          // Intel Quick Sync
 	HWAccelVAAPI        HWAccel = "vaapi"        // Linux VA-API (Intel/AMD)
 )
@@ -113,6 +114,13 @@ var allEncoderDefs = []*HWEncoder{
 		Name:        "NVENC AV1",
 		Description: "NVIDIA GPU (RTX 40+) hardware AV1 encoding",
 		Encoder:     "av1_nvenc",
+	},
+	{
+		Accel:       HWAccelAMF,
+		Codec:       CodecAV1,
+		Name:        "AMF AV1",
+		Description: "AMD GPU (AMF) hardware AV1 encoding",
+		Encoder:     "av1_amf",
 	},
 	{
 		Accel:       HWAccelQSV,
@@ -372,8 +380,8 @@ func IsEncoderAvailableForCodec(accel HWAccel, codec Codec) bool {
 
 // getBestEncoderForCodecInternal returns the best encoder from a given map (for internal use)
 func getBestEncoderForCodecInternal(encoders map[EncoderKey]*HWEncoder, codec Codec) *HWEncoder {
-	// Priority: VideoToolbox > NVENC > QSV > VAAPI > Software
-	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
+	// Priority: VideoToolbox > NVENC > AMF > QSV > VAAPI > Software
+	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelAMF, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
 
 	for _, accel := range priority {
 		key := EncoderKey{accel, codec}
@@ -428,7 +436,7 @@ func ListAvailableEncoders() []*HWEncoder {
 
 	var result []*HWEncoder
 	// Return in priority order (HEVC first, then AV1)
-	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
+	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelAMF, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
 	codecs := []Codec{CodecHEVC, CodecAV1}
 
 	for _, codec := range codecs {

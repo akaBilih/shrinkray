@@ -103,6 +103,14 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		hwaccelArgs: []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"},
 		scaleFilter: "scale_cuda",
 	},
+	{HWAccelAMF, CodecAV1}: {
+		encoder:     "av1_amf",
+		qualityFlag: "-b:v",
+		quality:     "0.25", // 25% of source bitrate
+		extraArgs:   []string{},
+		usesBitrate: true,
+		scaleFilter: "scale",
+	},
 	{HWAccelQSV, CodecAV1}: {
 		encoder:     "av1_qsv",
 		qualityFlag: "-global_quality",
@@ -211,7 +219,7 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64) (inputArgs []string, o
 	// fail to encode due to unsupported frame rates (90k fps)
 	outputArgs = append(outputArgs,
 		"-map", "0",
-		"-c:v", "copy",       // Default: copy all video streams (cover art, etc.)
+		"-c:v", "copy", // Default: copy all video streams (cover art, etc.)
 		"-c:v:0", config.encoder, // Override: encode only the first video stream
 	)
 
@@ -314,4 +322,3 @@ func ListPresets() []*Preset {
 
 	return result
 }
-
