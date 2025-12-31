@@ -386,6 +386,21 @@
             min-width: 150px;
         }
 
+        .file-list-controls .toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .file-list-controls .toggle input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
         .file-item {
             display: flex;
             align-items: center;
@@ -1627,6 +1642,10 @@
                                 <option value="workable">Folders + workable videos</option>
                             </select>
                         </label>
+                        <label class="toggle" id="hide-empty-folders-container" style="display: none;">
+                            <input type="checkbox" id="hide-empty-folders" onchange="updateHideEmptyFolders(this.checked)">
+                            Hide empty folders
+                        </label>
                     </div>
                     <div class="file-list-header hidden" id="file-list-header">
                         <label>
@@ -1941,7 +1960,8 @@
         let fileListEntries = [];
         const fileListState = {
             sort: 'name',
-            filter: 'all'
+            filter: 'all',
+            hideEmptyFolders: false
         };
         let eventSource = null;
         let cachedJobs = [];
@@ -2574,7 +2594,26 @@
 
         function updateFileFilter(value) {
             fileListState.filter = value;
+            updateEmptyFolderToggleVisibility();
             renderFileList();
+        }
+
+        function updateHideEmptyFolders(checked) {
+            fileListState.hideEmptyFolders = checked;
+            renderFileList();
+        }
+
+        function updateEmptyFolderToggleVisibility() {
+            const container = document.getElementById('hide-empty-folders-container');
+            const checkbox = document.getElementById('hide-empty-folders');
+            if (fileListState.filter === 'workable') {
+                container.style.display = 'flex';
+                checkbox.checked = fileListState.hideEmptyFolders;
+            } else {
+                container.style.display = 'none';
+                checkbox.checked = false;
+                fileListState.hideEmptyFolders = false;
+            }
         }
 
         function getEntrySize(entry) {
@@ -2614,7 +2653,15 @@
 
         function filterFileEntries(entries) {
             if (fileListState.filter === 'workable') {
-                return entries.filter(entry => entry.is_dir || (!entry.is_dir && entry.video_info));
+                return entries.filter(entry => {
+                    if (entry.is_dir) {
+                        if (fileListState.hideEmptyFolders) {
+                            return (entry.file_count || 0) > 0;
+                        }
+                        return true;
+                    }
+                    return entry.video_info;
+                });
             }
             return entries;
         }
@@ -2711,18 +2758,29 @@
 
                 // Update breadcrumb
                 const breadcrumb = document.getElementById('breadcrumb');
+                const parts = data.path.split('/').filter(Boolean);
                 let crumbs = `<a href="#" onclick="browse(''); return false;">Home</a>`;
-                if (data.parent) {
+                if (parts.length === 0) {
                     crumbs += `<span class="breadcrumb-sep">/</span>`;
-                    crumbs += `<a href="#" onclick="browse('${data.parent}'); return false;">...</a>`;
+                    crumbs += `<span class="breadcrumb-current">Root</span>`;
+                } else {
+                    let cumulativePath = '';
+                    parts.forEach((part, index) => {
+                        cumulativePath += `/${part}`;
+                        const isLast = index === parts.length - 1;
+                        crumbs += `<span class="breadcrumb-sep">/</span>`;
+                        if (isLast) {
+                            crumbs += `<span class="breadcrumb-current">${escapeHtml(part)}</span>`;
+                        } else {
+                            crumbs += `<a href="#" onclick="browse('${cumulativePath}'); return false;">${escapeHtml(part)}</a>`;
+                        }
+                    });
                 }
-                const currentFolder = data.path.split('/').pop() || 'Root';
-                crumbs += `<span class="breadcrumb-sep">/</span>`;
-                crumbs += `<span class="breadcrumb-current">${currentFolder}</span>`;
                 breadcrumb.innerHTML = crumbs;
 
                 // Update file list
                 fileListEntries = data.entries || [];
+                updateEmptyFolderToggleVisibility();
                 renderFileList();
 
             } catch (err) {
