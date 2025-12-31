@@ -87,6 +87,17 @@ type Config struct {
 
 	// Features contains feature flags for phased rollout of new functionality
 	Features FeatureFlags `yaml:"features"`
+
+	// Auth contains authentication configuration.
+	Auth AuthConfig `yaml:"auth"`
+}
+
+// AuthConfig configures authentication providers.
+type AuthConfig struct {
+	// Provider selects the auth provider name.
+	Provider string `yaml:"provider"`
+	// BypassPaths lists endpoints that bypass auth enforcement.
+	BypassPaths []string `yaml:"bypass_paths"`
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -101,6 +112,9 @@ func DefaultConfig() *Config {
 		QueueFile:        "",
 		NtfyServer:       "https://ntfy.sh",
 		Features:         DefaultFeatureFlags(),
+		Auth: AuthConfig{
+			Provider: "noop",
+		},
 	}
 }
 

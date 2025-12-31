@@ -12,6 +12,7 @@ import (
 
 	shrinkray "github.com/gwlsn/shrinkray"
 	"github.com/gwlsn/shrinkray/internal/api"
+	"github.com/gwlsn/shrinkray/internal/auth"
 	"github.com/gwlsn/shrinkray/internal/browse"
 	"github.com/gwlsn/shrinkray/internal/config"
 	"github.com/gwlsn/shrinkray/internal/ffmpeg"
@@ -125,7 +126,24 @@ func main() {
 
 	// Create API handler
 	handler := api.NewHandler(browser, queue, workerPool, cfg, cfgPath)
-	router := api.NewRouter(handler, shrinkray.WebFS, *debugUI)
+
+	authRegistry := auth.NewRegistry()
+	authRegistry.Register("noop", auth.NewNoopProvider())
+
+	providerName := cfg.Auth.Provider
+	if providerName == "" {
+		providerName = "noop"
+	}
+
+	authProvider, ok := authRegistry.Provider(providerName)
+	if !ok {
+		log.Fatalf("Unknown auth provider: %s", providerName)
+	}
+
+	bypassPaths := append(auth.DefaultBypassPaths(), cfg.Auth.BypassPaths...)
+	authMiddleware := auth.NewMiddleware(authProvider, bypassPaths)
+
+	router := api.NewRouter(handler, shrinkray.WebFS, *debugUI, authMiddleware)
 
 	// Start worker pool
 	workerPool.Start()
