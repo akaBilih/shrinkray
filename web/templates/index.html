@@ -297,18 +297,27 @@
             display: none;
         }
 
+        .file-list-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 20px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
         .breadcrumb {
             display: flex;
             align-items: center;
             gap: 4px;
             font-size: 0.875rem;
             color: var(--text-secondary);
-            padding: 12px 20px;
-            background: var(--bg-tertiary);
-            border-bottom: 1px solid var(--border);
             overflow: hidden;
             white-space: nowrap;
-            flex-shrink: 0;
+            flex: 1 1 auto;
+            min-width: 200px;
         }
 
         .breadcrumb a {
@@ -361,10 +370,12 @@
             flex-wrap: wrap;
             align-items: center;
             gap: 12px;
-            padding: 10px 20px;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg-secondary);
+            padding: 0;
+            border-bottom: none;
+            background: transparent;
             flex-shrink: 0;
+            margin-left: auto;
+            justify-content: flex-end;
         }
 
         .file-list-controls label {
@@ -1666,33 +1677,35 @@
         <main class="main">
             <div class="browser-panel">
                 <div class="panel">
-                    <div class="breadcrumb" id="breadcrumb">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                            Loading...
+                    <div class="file-list-bar">
+                        <div class="breadcrumb" id="breadcrumb">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading...
+                            </div>
                         </div>
-                    </div>
-                    <div class="file-list-controls">
-                        <label for="file-sort">
-                            Order by
-                            <select id="file-sort" onchange="updateFileSort(this.value)">
-                                <option value="name">Name (A–Z)</option>
-                                <option value="size">Size (largest first)</option>
-                                <option value="type">Type (folders first)</option>
-                                <option value="modified">Modified (newest first)</option>
-                            </select>
-                        </label>
-                        <label for="file-filter">
-                            Filter
-                            <select id="file-filter" onchange="updateFileFilter(this.value)">
-                                <option value="all">All items</option>
-                                <option value="workable">Folders + workable videos</option>
-                            </select>
-                        </label>
-                        <label class="toggle" id="hide-empty-folders-container" style="display: none;">
-                            <input type="checkbox" id="hide-empty-folders" onchange="updateHideEmptyFolders(this.checked)">
-                            Hide empty folders
-                        </label>
+                        <div class="file-list-controls">
+                            <label for="file-sort">
+                                Order by
+                                <select id="file-sort" onchange="updateFileSort(this.value)">
+                                    <option value="name">Name (A–Z)</option>
+                                    <option value="size">Size (largest first)</option>
+                                    <option value="type">Type (folders first)</option>
+                                    <option value="modified">Modified (newest first)</option>
+                                </select>
+                            </label>
+                            <label for="file-filter">
+                                Filter
+                                <select id="file-filter" onchange="updateFileFilter(this.value)">
+                                    <option value="all">All items</option>
+                                    <option value="workable">Folders + workable videos</option>
+                                </select>
+                            </label>
+                            <label class="toggle" id="hide-empty-folders-container" style="display: none;">
+                                <input type="checkbox" id="hide-empty-folders" onchange="updateHideEmptyFolders(this.checked)">
+                                Hide empty folders
+                            </label>
+                        </div>
                     </div>
                     <div class="file-list-header hidden" id="file-list-header">
                         <label>
