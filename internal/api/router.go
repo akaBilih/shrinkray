@@ -33,6 +33,8 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool, authMiddleware *au
 
 	// Auth callbacks
 	mux.Handle("GET /auth/callback", wrap(auth.CallbackHandler(provider)))
+	mux.Handle("GET /auth/login", wrap(auth.LoginHandler(provider)))
+	mux.Handle("POST /auth/login", wrap(auth.LoginHandler(provider)))
 
 	// API routes
 	mux.Handle("GET /api/browse", wrap(http.HandlerFunc(h.Browse)))
@@ -138,6 +140,8 @@ func NewRouterWithoutStatic(h *Handler, authMiddleware *auth.Middleware) *http.S
 
 	// Auth callbacks
 	mux.Handle("GET /auth/callback", wrap(auth.CallbackHandler(provider)))
+	mux.Handle("GET /auth/login", wrap(auth.LoginHandler(provider)))
+	mux.Handle("POST /auth/login", wrap(auth.LoginHandler(provider)))
 
 	// API routes
 	mux.Handle("GET /api/browse", wrap(http.HandlerFunc(h.Browse)))

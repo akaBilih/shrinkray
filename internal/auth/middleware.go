@@ -16,7 +16,7 @@ type Middleware struct {
 
 // DefaultBypassPaths returns default unauthenticated endpoints.
 func DefaultBypassPaths() []string {
-	return []string{"/healthz", "/auth/callback"}
+	return []string{"/healthz", "/auth/callback", "/auth/login"}
 }
 
 // NewMiddleware creates an auth middleware.

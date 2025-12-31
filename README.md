@@ -107,6 +107,12 @@ Config is stored in `/config/shrinkray.yaml`. Most settings are available in the
 | `ntfy_server` | `https://ntfy.sh` | ntfy server URL for notifications |
 | `ntfy_topic` | *(empty)* | ntfy topic for notifications |
 | `ntfy_token` | *(empty)* | ntfy access token (optional) |
+| `auth.enabled` | `false` | Require authentication |
+| `auth.provider` | `noop` | Auth provider name (`noop`, `password`) |
+| `auth.secret` | *(empty)* | HMAC secret used to sign session cookies |
+| `auth.bypass_paths` | *(empty)* | Extra unauthenticated paths (comma-separated in env) |
+| `auth.password.hash_algo` | `auto` | Password hash algorithm (`auto`, `bcrypt`, `argon2id`) |
+| `auth.password.users` | *(empty)* | Map of usernames to password hashes |
 
 Example:
 
@@ -115,6 +121,28 @@ media_path: /media
 temp_path: /tmp/shrinkray
 original_handling: replace
 workers: 2
+```
+
+Auth example:
+
+```yaml
+auth:
+  enabled: true
+  provider: password
+  secret: "change-me"
+  password:
+    hash_algo: auto
+    users:
+      admin: "$2b$12$abcdefghijklmnopqrstuv1234567890abcdefghijklmnopqrstuv"
+```
+
+Environment overrides:
+
+```bash
+SHRINKRAY_AUTH_ENABLED=1
+SHRINKRAY_AUTH_PROVIDER=password
+SHRINKRAY_AUTH_SECRET=change-me
+SHRINKRAY_AUTH_USERS='admin:$2b$12$abcdefghijklmnopqrstuv1234567890abcdefghijklmnopqrstuv'
 ```
 
 ## Building from Source
