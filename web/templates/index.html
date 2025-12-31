@@ -1607,6 +1607,18 @@
             white-space: nowrap;
         }
 
+        .completed-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .completed-item-time {
+            color: var(--text-tertiary);
+            font-size: 0.75rem;
+        }
+
         /* Virtual Scrolling - Only visible items are rendered to DOM */
         .virtual-scroll-container {
             position: relative;
@@ -2685,6 +2697,31 @@
             return `${s}s`;
         }
 
+        function getElapsedSeconds(job) {
+            if (!job) return null;
+            if (job.status === 'complete' && job.transcode_secs) {
+                return job.transcode_secs;
+            }
+            if (!job.started_at) return null;
+            const started = new Date(job.started_at);
+            if (Number.isNaN(started.getTime())) return null;
+            let endTime = Date.now();
+            if (job.completed_at) {
+                const completed = new Date(job.completed_at);
+                if (!Number.isNaN(completed.getTime())) {
+                    endTime = completed.getTime();
+                }
+            }
+            const elapsedSeconds = Math.max(0, Math.floor((endTime - started.getTime()) / 1000));
+            return elapsedSeconds;
+        }
+
+        function formatElapsed(job) {
+            const seconds = getElapsedSeconds(job);
+            if (seconds === null) return null;
+            return formatDuration(seconds);
+        }
+
         function updateFileSort(value) {
             fileListState.sort = value;
             localStorage.setItem(storageKeys.fileSort, value);
@@ -3186,6 +3223,7 @@
             if (isPendingProbe) {
                 detailsHtml = '<span class="job-detail">Waiting to scan...</span>';
             } else if (job.status === 'running') {
+                const elapsed = formatElapsed(job);
                 if (isInitializing) {
                     detailsHtml = '<span class="job-detail">Starting encoder...</span>';
                 } else {
@@ -3193,13 +3231,15 @@
                         <span class="job-detail"><span class="job-detail-value">${job.progress.toFixed(1)}%</span></span>
                         <span class="job-detail"><span class="job-detail-value">${job.speed.toFixed(2)}x</span></span>
                         <span class="job-detail">ETA: <span class="job-detail-value">${job.eta || '...'}</span></span>
+                        ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                     `;
                 }
             } else if (job.status === 'complete') {
+                const elapsed = formatElapsed(job);
                 detailsHtml = `
                     <span class="job-detail job-saved">Saved <span class="job-detail-value">${formatBytes(job.space_saved)}</span></span>
                     <span class="job-detail">${formatBytes(job.input_size)} → ${formatBytes(job.output_size)}</span>
-                    ${job.transcode_secs ? `<span class="job-detail">in <span class="job-detail-value">${formatDuration(job.transcode_secs)}</span></span>` : ''}
+                    ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                 `;
             }
 
@@ -3457,10 +3497,14 @@
                 const filename = job.input_path.split('/').pop();
                 const safeFilename = escapeHtml(filename);
                 const savedText = job.space_saved > 0 ? formatBytes(job.space_saved) : '—';
+                const elapsed = formatElapsed(job);
                 return `
                     <div class="completed-item">
                         <span class="completed-item-name" title="${escapeHtml(job.input_path)}">${safeFilename}</span>
-                        <span class="completed-item-saved">-${savedText}</span>
+                        <span class="completed-item-meta">
+                            <span class="completed-item-saved">-${savedText}</span>
+                            ${elapsed ? `<span class="completed-item-time">${elapsed}</span>` : ''}
+                        </span>
                     </div>
                 `;
             }).join('');
@@ -3500,6 +3544,7 @@
                     const isInitializing = job.progress === 0 && job.speed === 0;
                     const statusClass = isInitializing ? 'initializing' : 'running';
                     const statusLabel = isInitializing ? 'Initializing' : 'Running';
+                    const elapsed = formatElapsed(job);
 
                     const safeId = escapeHtml(job.id);
                     const safePath = escapeHtml(job.input_path);
@@ -3513,6 +3558,7 @@
                             <span class="job-detail"><span class="job-detail-value">${job.progress.toFixed(1)}%</span></span>
                             <span class="job-detail"><span class="job-detail-value">${job.speed.toFixed(2)}x</span></span>
                             <span class="job-detail">ETA: <span class="job-detail-value">${escapeHtml(job.eta) || '...'}</span></span>
+                            ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                         `;
                     }
 
@@ -3581,6 +3627,13 @@
         function updateActiveJobProgress(jobData) {
             const isInitializing = jobData.progress === 0 && jobData.speed === 0;
             const safeEta = escapeHtml(jobData.eta) || '...';
+            const cachedJob = cachedJobs.find(j => j.id === jobData.id);
+            if (cachedJob) {
+                cachedJob.progress = jobData.progress;
+                cachedJob.speed = jobData.speed;
+                cachedJob.eta = jobData.eta;
+            }
+            const elapsed = formatElapsed(cachedJob || jobData);
 
             // Update active panel - find the specific job item by ID
             const nowProcessingContent = document.getElementById('now-processing-content');
@@ -3602,17 +3655,18 @@
 
             // Update details in active panel
             const activeDetails = activeJobEl.querySelector('.job-details');
-            if (activeDetails) {
-                if (isInitializing) {
-                    activeDetails.innerHTML = '<span class="job-detail">Starting encoder...</span>';
-                } else {
-                    activeDetails.innerHTML = `
-                        <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
-                        <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
-                        <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
-                    `;
+                if (activeDetails) {
+                    if (isInitializing) {
+                        activeDetails.innerHTML = '<span class="job-detail">Starting encoder...</span>';
+                    } else {
+                        activeDetails.innerHTML = `
+                            <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
+                            <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
+                            <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
+                            ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
+                        `;
+                    }
                 }
-            }
 
             // Update status badge in active panel
             const activeBadge = activeJobEl.querySelector('.job-badge.running, .job-badge.initializing');
@@ -3642,6 +3696,7 @@
                             <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
                             <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
                             <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
+                            ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                         `;
                     }
                 }
@@ -3654,13 +3709,7 @@
                 }
             }
 
-            // Update cached job data
-            const cachedJob = cachedJobs.find(j => j.id === jobData.id);
-            if (cachedJob) {
-                cachedJob.progress = jobData.progress;
-                cachedJob.speed = jobData.speed;
-                cachedJob.eta = jobData.eta;
-            }
+            // Update cached job data already handled above
         }
 
         // Performance: Handle batch of jobs added at once
@@ -3720,6 +3769,7 @@
                 cachedJob.speed = speed;
                 cachedJob.eta = eta;
             }
+            const elapsed = formatElapsed(cachedJob);
 
             // Update active panel job
             const safeId = escapeCssSelector(id);
@@ -3743,6 +3793,7 @@
                             <span class="job-detail"><span class="job-detail-value">${progress.toFixed(1)}%</span></span>
                             <span class="job-detail"><span class="job-detail-value">${speed.toFixed(2)}x</span></span>
                             <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
+                            ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                         `;
                     }
                 }
@@ -3773,6 +3824,7 @@
                             <span class="job-detail"><span class="job-detail-value">${progress.toFixed(1)}%</span></span>
                             <span class="job-detail"><span class="job-detail-value">${speed.toFixed(2)}x</span></span>
                             <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
+                            ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                         `;
                     }
                 }
