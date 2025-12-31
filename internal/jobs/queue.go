@@ -620,9 +620,10 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 	q.recordProcessedPathLocked(job.InputPath, job.CompletedAt)
 
 	if wasComplete {
-		q.totalSaved -= previousSaved
+		q.totalSaved += job.SpaceSaved - previousSaved
+	} else {
+		q.totalSaved += job.SpaceSaved
 	}
-	q.totalSaved += job.SpaceSaved
 
 	if err := q.save(); err != nil {
 		fmt.Printf("Warning: failed to persist queue: %v\n", err)
