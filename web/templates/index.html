@@ -259,15 +259,21 @@
             gap: 8px;
         }
 
-        .panel-title.panel-toggle {
+        .panel-toggle {
             background: none;
             border: 0;
             padding: 0;
             color: inherit;
             cursor: pointer;
+            width: 100%;
+            font: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
         }
 
-        .panel-title.panel-toggle:focus-visible {
+        .panel-toggle:focus-visible {
             outline: 2px solid var(--accent);
             outline-offset: 2px;
             border-radius: 6px;
@@ -275,6 +281,12 @@
 
         .panel-collapse-toggle {
             transition: transform var(--transition-fast);
+        }
+
+        .panel-toggle-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .panel.collapsed .panel-collapse-toggle {
@@ -1598,11 +1610,13 @@
             <div class="queue-panel">
                 <div class="panel active-jobs-panel" id="active-panel" style="display: none;">
                     <div class="panel-header">
-                        <button class="panel-title panel-toggle" type="button" onclick="togglePanel('active-panel')" aria-expanded="true" aria-controls="active-panel-content">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polygon points="5 3 19 12 5 21 5 3"/>
-                            </svg>
-                            Active
+                        <button class="panel-toggle" type="button" onclick="togglePanel('active-panel')" aria-expanded="true" aria-controls="active-panel-content">
+                            <span class="panel-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                                Active
+                            </span>
                             <svg class="panel-collapse-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
@@ -1621,24 +1635,28 @@
                 </div>
                 <div class="panel queue-panel-inner" id="queue-panel">
                     <div class="panel-header">
-                        <button class="panel-title panel-toggle" type="button" onclick="togglePanel('queue-panel')" aria-expanded="true" aria-controls="queue-panel-content">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="8" y1="6" x2="21" y2="6"/>
-                                <line x1="8" y1="12" x2="21" y2="12"/>
-                                <line x1="8" y1="18" x2="21" y2="18"/>
-                                <line x1="3" y1="6" x2="3.01" y2="6"/>
-                                <line x1="3" y1="12" x2="3.01" y2="12"/>
-                                <line x1="3" y1="18" x2="3.01" y2="18"/>
-                            </svg>
-                            Queue
-                            <svg class="panel-collapse-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
+                        <button class="panel-toggle" type="button" onclick="togglePanel('queue-panel')" aria-expanded="true" aria-controls="queue-panel-content">
+                            <span class="panel-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="8" y1="6" x2="21" y2="6"/>
+                                    <line x1="8" y1="12" x2="21" y2="12"/>
+                                    <line x1="8" y1="18" x2="21" y2="18"/>
+                                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                                </svg>
+                                Queue
+                            </span>
+                            <span class="panel-toggle-actions">
+                                <label class="notify-label" id="notify-container" style="display: none" onclick="event.stopPropagation()">
+                                    <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)" onclick="event.stopPropagation()">
+                                    <span>Notify when done</span>
+                                </label>
+                                <svg class="panel-collapse-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </span>
                         </button>
-                        <label class="notify-label" id="notify-container" style="display: none">
-                            <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)">
-                            <span>Notify when done</span>
-                        </label>
                     </div>
                     <div class="panel-body queue-panel-content" id="queue-panel-content">
                         <div class="queue-list" id="queue-list">
@@ -2988,7 +3006,7 @@
             }
 
             panel.classList.toggle('collapsed');
-            const toggleButton = panel.querySelector('.panel-title.panel-toggle');
+            const toggleButton = panel.querySelector('.panel-toggle');
             if (toggleButton) {
                 toggleButton.setAttribute('aria-expanded', String(!panel.classList.contains('collapsed')));
             }
