@@ -3710,8 +3710,9 @@
             }
 
             // Update the corresponding row in the queue list (use escaped selector)
+            const queueList = document.getElementById('queue-list');
             const safeSelector = `.job-item[data-job-id="${escapeCssSelector(jobData.id)}"]`;
-            const queueRow = document.querySelector(safeSelector);
+            const queueRow = queueList ? queueList.querySelector(safeSelector) : null;
             if (queueRow) {
                 // Update progress bar
                 const progressFill = queueRow.querySelector('.progress-fill');
@@ -3832,7 +3833,8 @@
             }
 
             // Update queue list row
-            const queueRow = document.querySelector(`.job-item[data-job-id="${safeId}"]`);
+            const queueList = document.getElementById('queue-list');
+            const queueRow = queueList ? queueList.querySelector(`.job-item[data-job-id="${safeId}"]`) : null;
             if (queueRow) {
                 const progressFill = queueRow.querySelector('.progress-fill');
                 if (progressFill) {
