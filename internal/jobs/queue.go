@@ -13,14 +13,12 @@ import (
 
 // Queue manages the job queue with persistence
 type Queue struct {
-	mu       sync.RWMutex
-	jobs     map[string]*Job
-	order    []string // Job IDs in order of creation
-	filePath string   // Path to persistence file
-	// processedPaths tracks all successfully processed input paths.
-	processedPaths map[string]time.Time
-	// totalSaved tracks total bytes saved across completed jobs.
-	totalSaved int64
+	mu             sync.RWMutex
+	jobs           map[string]*Job
+	order          []string             // Job IDs in order of creation
+	filePath       string               // Path to persistence file
+	processedPaths map[string]time.Time // All successfully processed input paths
+	totalSaved     int64                // Total bytes saved across completed job history
 
 	// Subscribers for job events
 	subsMu      sync.RWMutex
