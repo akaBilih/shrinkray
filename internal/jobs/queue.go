@@ -19,6 +19,8 @@ type Queue struct {
 	filePath string   // Path to persistence file
 	// processedPaths tracks all successfully processed input paths.
 	processedPaths map[string]time.Time
+	// totalSaved tracks total bytes saved across completed jobs.
+	totalSaved int64
 
 	// Subscribers for job events
 	subsMu      sync.RWMutex
@@ -54,6 +56,7 @@ type persistenceData struct {
 	Jobs           []*Job               `json:"jobs"`
 	Order          []string             `json:"order"`
 	ProcessedPaths map[string]time.Time `json:"processed_paths,omitempty"`
+	TotalSaved     *int64               `json:"total_saved,omitempty"`
 }
 
 // load reads the queue from disk
@@ -84,6 +87,15 @@ func (q *Queue) load() error {
 		for _, job := range q.jobs {
 			if job.Status == StatusComplete {
 				q.recordProcessedPathLocked(job.InputPath, job.CompletedAt)
+			}
+		}
+	}
+	if pd.TotalSaved != nil {
+		q.totalSaved = *pd.TotalSaved
+	} else {
+		for _, job := range q.jobs {
+			if job.Status == StatusComplete {
+				q.totalSaved += job.SpaceSaved
 			}
 		}
 	}
@@ -121,10 +133,12 @@ func (q *Queue) save() error {
 		}
 	}
 
+	totalSaved := q.totalSaved
 	pd := persistenceData{
 		Jobs:           jobs,
 		Order:          q.order,
 		ProcessedPaths: q.processedPaths,
+		TotalSaved:     &totalSaved,
 	}
 
 	data, err := json.MarshalIndent(pd, "", "  ")
@@ -603,6 +617,7 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 	job.TranscodeTime = int64(job.CompletedAt.Sub(job.StartedAt).Seconds())
 	job.TempPath = "" // Clear temp path
 	q.recordProcessedPathLocked(job.InputPath, job.CompletedAt)
+	q.totalSaved += job.SpaceSaved
 
 	if err := q.save(); err != nil {
 		fmt.Printf("Warning: failed to persist queue: %v\n", err)
@@ -829,13 +844,13 @@ func (q *Queue) Stats() Stats {
 			stats.Running++
 		case StatusComplete:
 			stats.Complete++
-			stats.TotalSaved += job.SpaceSaved
 		case StatusFailed:
 			stats.Failed++
 		case StatusCancelled:
 			stats.Cancelled++
 		}
 	}
+	stats.TotalSaved = q.totalSaved
 	return stats
 }
 
