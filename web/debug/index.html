@@ -698,6 +698,25 @@
             }
         }
 
+        async function moveJob(id, direction) {
+            try {
+                const resp = await fetch(`/api/jobs/${id}/reorder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ direction })
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    log(`Error reordering: ${data.error || 'Failed to move job'}`);
+                    return;
+                }
+                log(`Moved job ${id} ${direction}`);
+                refreshJobs();
+            } catch (err) {
+                log(`Error reordering: ${err.message}`);
+            }
+        }
+
         async function clearCompleted() {
             try {
                 const resp = await fetch('/api/jobs/clear', { method: 'POST' });
@@ -762,8 +781,14 @@
                             ` : ''}
                             ${job.status === 'failed' ? `<span style="color: #ff3b30">${job.error}</span>` : ''}
                         </div>
-                        ${job.status === 'pending' || job.status === 'running' ? `
-                            <button onclick="cancelJob('${job.id}')" class="danger" style="margin-top: 10px; padding: 5px 10px; font-size: 0.875rem;">Cancel</button>
+                        ${job.status === 'pending' || job.status === 'pending_probe' || job.status === 'running' ? `
+                            <div style="margin-top: 10px; display: flex; gap: 6px;">
+                                ${job.status === 'pending' || job.status === 'pending_probe' ? `
+                                    <button onclick="moveJob('${job.id}', 'up')" style="padding: 5px 8px; font-size: 0.875rem;">↑</button>
+                                    <button onclick="moveJob('${job.id}', 'down')" style="padding: 5px 8px; font-size: 0.875rem;">↓</button>
+                                ` : ''}
+                                <button onclick="cancelJob('${job.id}')" class="danger" style="padding: 5px 10px; font-size: 0.875rem;">Cancel</button>
+                            </div>
                         ` : ''}
                     </div>
                 `;

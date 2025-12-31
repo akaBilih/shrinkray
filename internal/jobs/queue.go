@@ -818,6 +818,76 @@ func (q *Queue) Remove(id string) {
 	}
 }
 
+// ReorderPending moves a pending job up or down within the pending queue order.
+// Only pending or pending_probe jobs can be reordered.
+// Returns true if the order changed.
+func (q *Queue) ReorderPending(id string, direction string) (bool, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return false, fmt.Errorf("job not found: %s", id)
+	}
+	if job.Status != StatusPending && job.Status != StatusPendingProbe {
+		return false, fmt.Errorf("job not pending: %s", job.Status)
+	}
+
+	if direction != "up" && direction != "down" {
+		return false, fmt.Errorf("invalid direction: %s", direction)
+	}
+
+	pendingIDs := make([]string, 0)
+	for _, jid := range q.order {
+		if queued, ok := q.jobs[jid]; ok && (queued.Status == StatusPending || queued.Status == StatusPendingProbe) {
+			pendingIDs = append(pendingIDs, jid)
+		}
+	}
+
+	currentIdx := -1
+	for idx, jid := range pendingIDs {
+		if jid == id {
+			currentIdx = idx
+			break
+		}
+	}
+	if currentIdx == -1 {
+		return false, fmt.Errorf("job not found in pending order: %s", id)
+	}
+
+	targetIdx := currentIdx
+	if direction == "up" && currentIdx > 0 {
+		targetIdx = currentIdx - 1
+	}
+	if direction == "down" && currentIdx < len(pendingIDs)-1 {
+		targetIdx = currentIdx + 1
+	}
+	if targetIdx == currentIdx {
+		return false, nil
+	}
+
+	pendingIDs[currentIdx], pendingIDs[targetIdx] = pendingIDs[targetIdx], pendingIDs[currentIdx]
+
+	newOrder := make([]string, 0, len(q.order))
+	pendingPos := 0
+	for _, jid := range q.order {
+		if queued, ok := q.jobs[jid]; ok && (queued.Status == StatusPending || queued.Status == StatusPendingProbe) {
+			newOrder = append(newOrder, pendingIDs[pendingPos])
+			pendingPos++
+			continue
+		}
+		newOrder = append(newOrder, jid)
+	}
+	q.order = newOrder
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	q.broadcast(JobEvent{Type: "reordered"})
+	return true, nil
+}
+
 // Subscribe returns a channel that receives job events
 func (q *Queue) Subscribe() chan JobEvent {
 	ch := make(chan JobEvent, 100)
