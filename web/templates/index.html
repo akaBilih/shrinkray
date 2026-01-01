@@ -2173,14 +2173,14 @@
             scrollContainer.classList.add('virtual-scroll-enabled', 'virtual-scroll-container');
 
             // Throttled scroll handler
-            let scrollTimeout = null;
+            let scrollRafId = null;
             scrollContainer.addEventListener('scroll', () => {
-                if (scrollTimeout) return;
-                scrollTimeout = setTimeout(() => {
-                    scrollTimeout = null;
+                if (scrollRafId !== null) return;
+                scrollRafId = requestAnimationFrame(() => {
+                    scrollRafId = null;
                     updateVisibleRange();
-                }, 16); // ~60fps
-            });
+                });
+            }, { passive: true });
         }
 
         function updateVisibleRange() {
