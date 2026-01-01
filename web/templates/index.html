@@ -259,18 +259,65 @@
             gap: 8px;
         }
 
+        .panel-toggle {
+            background: none;
+            border: 0;
+            padding: 0;
+            color: inherit;
+            cursor: pointer;
+            width: 100%;
+            font: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .panel-toggle:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-radius: 6px;
+        }
+
+        .panel-collapse-toggle {
+            transition: transform var(--transition-fast);
+        }
+
+        .panel-toggle-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .panel.collapsed .panel-collapse-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .panel.collapsed .panel-body {
+            display: none;
+        }
+
+        .file-list-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 20px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
         .breadcrumb {
             display: flex;
             align-items: center;
             gap: 4px;
             font-size: 0.875rem;
             color: var(--text-secondary);
-            padding: 12px 20px;
-            background: var(--bg-tertiary);
-            border-bottom: 1px solid var(--border);
             overflow: hidden;
             white-space: nowrap;
-            flex-shrink: 0;
+            flex: 1 1 auto;
+            min-width: 200px;
         }
 
         .breadcrumb a {
@@ -316,6 +363,53 @@
             gap: 8px;
             cursor: pointer;
             user-select: none;
+        }
+
+        .file-list-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            padding: 0;
+            border-bottom: none;
+            background: transparent;
+            flex-shrink: 0;
+            margin-left: auto;
+            justify-content: flex-end;
+        }
+
+        .file-list-controls label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .file-list-controls select {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 6px 10px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 0.8125rem;
+            font-family: var(--font-sans);
+            min-width: 150px;
+        }
+
+        .file-list-controls .toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .file-list-controls .toggle input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
         }
 
         .file-item {
@@ -434,6 +528,31 @@
             color: var(--text-secondary);
         }
 
+        .file-trailing {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .processed-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            background: rgba(16, 185, 129, 0.2);
+            color: #047857;
+        }
+
+        [data-theme="dark"] .processed-tag {
+            background: rgba(16, 185, 129, 0.25);
+            color: #6ee7b7;
+        }
+
         .file-list-empty {
             padding: 60px 20px;
             text-align: center;
@@ -549,6 +668,13 @@
             font-size: 0.8125rem;
         }
 
+        .file-action-btn {
+            padding: 4px 8px;
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
         .selection-count {
             margin-left: auto;
             font-size: 0.8125rem;
@@ -569,16 +695,42 @@
             display: flex;
             flex-direction: column;
             max-height: 100%;
+            flex: 1;
+        }
+
+        .panel-body {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .queue-panel-content {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .panel-body {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .queue-panel-content {
+            flex: 1;
+            min-height: 0;
         }
 
         .queue-list {
             overflow-y: auto;
         }
 
+        .queue-panel-content .queue-list {
+            flex: 1;
+        }
+
         /* Active Jobs Panel - Separate box above queue */
         .active-jobs-panel {
             flex-shrink: 0;
-            margin-bottom: 16px;
         }
 
         .active-panel-content {
@@ -971,6 +1123,23 @@
 
         .job-actions {
             margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .job-item.draggable {
+            cursor: grab;
+        }
+
+        .job-item.dragging {
+            opacity: 0.6;
+            cursor: grabbing;
+        }
+
+        .job-item.drag-over {
+            outline: 2px dashed var(--accent);
+            outline-offset: 4px;
         }
 
         .queue-empty {
@@ -1346,6 +1515,26 @@
             margin-bottom: 24px;
         }
 
+        .modal-options {
+            margin: -8px 0 24px;
+            display: none;
+        }
+
+        .modal-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .modal-option input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
         .modal-actions {
             display: flex;
             gap: 12px;
@@ -1442,6 +1631,18 @@
             white-space: nowrap;
         }
 
+        .completed-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .completed-item-time {
+            color: var(--text-tertiary);
+            font-size: 0.75rem;
+        }
+
         /* Virtual Scrolling - Only visible items are rendered to DOM */
         .virtual-scroll-container {
             position: relative;
@@ -1521,10 +1722,34 @@
         <main class="main">
             <div class="browser-panel">
                 <div class="panel">
-                    <div class="breadcrumb" id="breadcrumb">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                            Loading...
+                    <div class="file-list-bar">
+                        <div class="breadcrumb" id="breadcrumb">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading...
+                            </div>
+                        </div>
+                        <div class="file-list-controls">
+                            <label for="file-sort">
+                                Order by
+                                <select id="file-sort" onchange="updateFileSort(this.value)">
+                                    <option value="name">Name (A–Z)</option>
+                                    <option value="size">Size (largest first)</option>
+                                    <option value="type">Type (folders first)</option>
+                                    <option value="modified">Modified (newest first)</option>
+                                </select>
+                            </label>
+                            <label for="file-filter">
+                                Filter
+                                <select id="file-filter" onchange="updateFileFilter(this.value)">
+                                    <option value="all">All items</option>
+                                    <option value="workable">Folders + workable videos</option>
+                                </select>
+                            </label>
+                            <label class="toggle" id="hide-empty-folders-container" style="display: none;">
+                                <input type="checkbox" id="hide-empty-folders" onchange="updateHideEmptyFolders(this.checked)">
+                                Hide empty folders
+                            </label>
                         </div>
                     </div>
                     <div class="file-list-header hidden" id="file-list-header">
@@ -1548,6 +1773,7 @@
                             <input type="checkbox" id="include-subfolders" checked>
                             <span>Include subfolders</span>
                         </label>
+                        <button class="btn btn-secondary" onclick="markSelectedProcessed()" id="mark-processed-btn" disabled>Mark Processed</button>
                         <button class="btn btn-primary" onclick="startJobs()" id="start-btn" disabled>Start Transcode</button>
                         <span class="selection-count" id="selection-summary"></span>
                     </div>
@@ -1557,14 +1783,19 @@
             <div class="queue-panel">
                 <div class="panel active-jobs-panel" id="active-panel" style="display: none;">
                     <div class="panel-header">
-                        <span class="panel-title">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polygon points="5 3 19 12 5 21 5 3"/>
+                        <button class="panel-toggle" type="button" onclick="togglePanel('active-panel')" aria-expanded="true" aria-controls="active-panel-content">
+                            <span class="panel-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                                Active
+                            </span>
+                            <svg class="panel-collapse-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
-                            Active
-                        </span>
+                        </button>
                     </div>
-                    <div class="active-panel-content">
+                    <div class="panel-body active-panel-content" id="active-panel-content">
                         <div class="active-panel-section" id="now-processing-section">
                             <div class="active-panel-title">Now Processing</div>
                             <div id="now-processing-content"></div>
@@ -1575,52 +1806,61 @@
                         </div>
                     </div>
                 </div>
-                <div class="panel queue-panel-inner">
+                <div class="panel queue-panel-inner" id="queue-panel">
                     <div class="panel-header">
-                        <span class="panel-title">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="8" y1="6" x2="21" y2="6"/>
-                                <line x1="8" y1="12" x2="21" y2="12"/>
-                                <line x1="8" y1="18" x2="21" y2="18"/>
-                                <line x1="3" y1="6" x2="3.01" y2="6"/>
-                                <line x1="3" y1="12" x2="3.01" y2="12"/>
-                                <line x1="3" y1="18" x2="3.01" y2="18"/>
-                            </svg>
-                            Queue
-                        </span>
-                        <label class="notify-label" id="notify-container" style="display: none">
-                            <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)">
-                            <span>Notify when done</span>
-                        </label>
+                        <button class="panel-toggle" type="button" onclick="togglePanel('queue-panel')" aria-expanded="true" aria-controls="queue-panel-content">
+                            <span class="panel-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="8" y1="6" x2="21" y2="6"/>
+                                    <line x1="8" y1="12" x2="21" y2="12"/>
+                                    <line x1="8" y1="18" x2="21" y2="18"/>
+                                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                                </svg>
+                                Queue
+                            </span>
+                            <span class="panel-toggle-actions">
+                                <label class="notify-label" id="notify-container" style="display: none" onclick="event.stopPropagation()">
+                                    <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)" onclick="event.stopPropagation()">
+                                    <span>Notify when done</span>
+                                </label>
+                                <svg class="panel-collapse-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </span>
+                        </button>
                     </div>
-                    <div class="queue-list" id="queue-list">
-                        <div class="queue-empty">
-                            <div class="queue-empty-icon">
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.3">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <path d="M3 9h18"/>
-                                    <path d="M9 21V9"/>
+                    <div class="panel-body queue-panel-content" id="queue-panel-content">
+                        <div class="queue-list" id="queue-list">
+                            <div class="queue-empty">
+                                <div class="queue-empty-icon">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.3">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <path d="M3 9h18"/>
+                                        <path d="M9 21V9"/>
+                                    </svg>
+                                </div>
+                                <div>No jobs in queue</div>
+                                <div style="font-size: 0.8125rem; margin-top: 4px; color: var(--text-tertiary)">Select files and start transcoding</div>
+                            </div>
+                        </div>
+                        <!-- Completed Jobs Section -->
+                        <div class="completed-section" id="completed-section" style="display: none;">
+                            <div class="completed-header" onclick="toggleCompletedSection()">
+                                <div class="completed-title">
+                                    <span>Recently Completed</span>
+                                    <span class="completed-count" id="completed-count">0</span>
+                                </div>
+                                <svg class="completed-toggle" id="completed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
                             </div>
-                            <div>No jobs in queue</div>
-                            <div style="font-size: 0.8125rem; margin-top: 4px; color: var(--text-tertiary)">Select files and start transcoding</div>
+                            <div class="completed-list" id="completed-list"></div>
                         </div>
-                    </div>
-                    <!-- Completed Jobs Section -->
-                    <div class="completed-section" id="completed-section" style="display: none;">
-                        <div class="completed-header" onclick="toggleCompletedSection()">
-                            <div class="completed-title">
-                                <span>Recently Completed</span>
-                                <span class="completed-count" id="completed-count">0</span>
-                            </div>
-                            <svg class="completed-toggle" id="completed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
+                        <div class="queue-footer">
+                            <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
                         </div>
-                        <div class="completed-list" id="completed-list"></div>
-                    </div>
-                    <div class="queue-footer">
-                        <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
                     </div>
                 </div>
             </div>
@@ -1672,6 +1912,18 @@
                     </div>
                 </div>
                 <div class="setting-group">
+                    <div class="setting-group-title">History</div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Processed videos</div>
+                            <div class="setting-desc">Clear the stored processed history used for badges</div>
+                        </div>
+                        <div class="setting-control">
+                            <button class="btn btn-secondary btn-sm" onclick="clearProcessedHistory()">Clear</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-group">
                     <div class="setting-group-title">Notifications</div>
                     <div class="setting-item">
                         <div class="setting-info">
@@ -1702,6 +1954,45 @@
                             <button class="btn btn-secondary btn-sm" id="test-pushover-btn" onclick="testPushover()">Test</button>
                         </div>
                     </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">ntfy Server</div>
+                            <div class="setting-desc">Server URL (default: https://ntfy.sh)</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" class="setting-input" id="setting-ntfy-server"
+                                   placeholder="https://ntfy.sh" onchange="updateSetting('ntfy_server', this.value)">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">ntfy Topic</div>
+                            <div class="setting-desc">Topic name for notifications</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" class="setting-input" id="setting-ntfy-topic"
+                                   placeholder="Enter topic" onchange="updateSetting('ntfy_topic', this.value)">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">ntfy Token</div>
+                            <div class="setting-desc">Optional access token</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" class="setting-input" id="setting-ntfy-token"
+                                   placeholder="Enter token (optional)" onchange="updateSetting('ntfy_token', this.value)">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Test ntfy</div>
+                            <div class="setting-desc">Send a test to verify setup</div>
+                        </div>
+                        <div class="setting-control">
+                            <button class="btn btn-secondary btn-sm" id="test-ntfy-btn" onclick="testNtfy()">Test</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="setting-group">
                     <div class="setting-group-title">Fun</div>
@@ -1726,6 +2017,12 @@
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-title" id="confirm-modal-title">Confirm</div>
             <div class="modal-message" id="confirm-modal-message"></div>
+            <div class="modal-options" id="confirm-modal-options">
+                <label class="modal-option" for="confirm-modal-remove-completed">
+                    <input type="checkbox" id="confirm-modal-remove-completed" checked>
+                    <span>Also remove recently completed jobs</span>
+                </label>
+            </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
                 <button class="btn btn-primary" id="confirm-modal-action">Confirm</button>
@@ -1784,6 +2081,23 @@
 
         let currentPath = '';
         let selectedPaths = new Set();
+        let fileListEntries = [];
+        const storageKeys = {
+            fileSort: 'shrinkray-file-sort',
+            fileFilter: 'shrinkray-file-filter',
+            hideEmptyFolders: 'shrinkray-hide-empty-folders',
+            selectedPreset: 'shrinkray-selected-preset',
+            includeSubfolders: 'shrinkray-include-subfolders',
+            notifyOnComplete: 'shrinkray-notify-on-complete',
+            clearRecentlyCompleted: 'shrinkray-clear-recently-completed'
+        };
+
+        const fileListState = {
+            sort: 'name',
+            filter: 'all',
+            hideEmptyFolders: false
+        };
+        let preferredPresetId = localStorage.getItem(storageKeys.selectedPreset) || '';
         let eventSource = null;
         let cachedJobs = [];
 
@@ -1829,6 +2143,10 @@
         // Virtual scroll state
         let visibleRange = { start: 0, end: 20 };
         let scrollContainer = null;
+
+        // Error helper UI state (preserve expand/collapse across rerenders)
+        const errorHelperExpanded = new Set();
+        const errorRawExpanded = new Set();
 
         // ========================================
         // Virtual Scroll Implementation
@@ -1963,6 +2281,20 @@
             jobOrder = [];
             Object.values(statusIndex).forEach(set => set.clear());
             visibleRange = { start: 0, end: 20 };
+        }
+
+        function pruneErrorHelperState(jobs) {
+            const activeIds = new Set(jobs.map(job => job.id));
+            for (const id of errorHelperExpanded) {
+                if (!activeIds.has(id)) {
+                    errorHelperExpanded.delete(id);
+                }
+            }
+            for (const id of errorRawExpanded) {
+                if (!activeIds.has(id)) {
+                    errorRawExpanded.delete(id);
+                }
+            }
         }
 
         // Escape HTML to prevent XSS
@@ -2272,6 +2604,8 @@
             if (job.status !== 'failed') return '';
 
             const analysis = analyzeError(job);
+            const isExpanded = errorHelperExpanded.has(job.id);
+            const isRawExpanded = errorRawExpanded.has(job.id);
             const safeId = escapeHtml(job.id);
             const safeSummary = escapeHtml(analysis.summary);
             const safeMatched = analysis.matched ? escapeHtml(analysis.matched) : null;
@@ -2288,13 +2622,13 @@
             const confidenceClass = analysis.confidence;
 
             return `
-                <button class="error-helper-toggle" onclick="toggleErrorHelper('${safeId}')">
+                <button class="error-helper-toggle ${isExpanded ? 'expanded' : ''}" onclick="toggleErrorHelper('${safeId}')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                     Explain error
                 </button>
-                <div class="error-helper-panel" id="error-helper-${safeId}">
+                <div class="error-helper-panel ${isExpanded ? 'expanded' : ''}" id="error-helper-${safeId}">
                     <div class="error-helper-summary">
                         <span class="error-helper-summary-text">${safeSummary}</span>
                         <span class="error-helper-confidence ${confidenceClass}">${analysis.confidence}</span>
@@ -2322,13 +2656,13 @@
                     </div>
 
                     <div class="error-helper-section">
-                        <button class="error-helper-raw-toggle" onclick="toggleRawOutput('${safeId}')">
+                        <button class="error-helper-raw-toggle ${isRawExpanded ? 'expanded' : ''}" onclick="toggleRawOutput('${safeId}')">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
                             Show raw ffmpeg output
                         </button>
-                        <div class="error-helper-raw" id="error-raw-${safeId}">${safeStderr || 'No stderr output captured.'}</div>
+                        <div class="error-helper-raw ${isRawExpanded ? 'expanded' : ''}" id="error-raw-${safeId}">${safeStderr || 'No stderr output captured.'}</div>
                     </div>
                 </div>
             `;
@@ -2342,8 +2676,13 @@
             const toggle = document.querySelector(toggleSelector);
 
             if (panel && toggle) {
-                panel.classList.toggle('expanded');
-                toggle.classList.toggle('expanded');
+                const isExpanded = panel.classList.toggle('expanded');
+                toggle.classList.toggle('expanded', isExpanded);
+                if (isExpanded) {
+                    errorHelperExpanded.add(jobId);
+                } else {
+                    errorHelperExpanded.delete(jobId);
+                }
             }
         }
 
@@ -2355,8 +2694,13 @@
             const toggle = document.querySelector(toggleSelector);
 
             if (raw && toggle) {
-                raw.classList.toggle('expanded');
-                toggle.classList.toggle('expanded');
+                const isExpanded = raw.classList.toggle('expanded');
+                toggle.classList.toggle('expanded', isExpanded);
+                if (isExpanded) {
+                    errorRawExpanded.add(jobId);
+                } else {
+                    errorRawExpanded.delete(jobId);
+                }
             }
         }
 
@@ -2378,6 +2722,245 @@
             return `${s}s`;
         }
 
+        function getElapsedSeconds(job) {
+            if (!job) return null;
+            if (job.status === 'complete' && job.transcode_secs) {
+                return job.transcode_secs;
+            }
+            if (!job.started_at) return null;
+            const started = new Date(job.started_at);
+            if (Number.isNaN(started.getTime())) return null;
+            let endTime = Date.now();
+            if (job.completed_at) {
+                const completed = new Date(job.completed_at);
+                if (!Number.isNaN(completed.getTime())) {
+                    endTime = completed.getTime();
+                }
+            }
+            const elapsedSeconds = Math.max(0, Math.floor((endTime - started.getTime()) / 1000));
+            return elapsedSeconds;
+        }
+
+        function formatElapsed(job) {
+            const seconds = getElapsedSeconds(job);
+            if (seconds === null) return null;
+            return formatDuration(seconds);
+        }
+
+        function renderRunningDetails(progress, speed, etaValue, elapsed) {
+            return `
+                <span class="job-detail"><span class="job-detail-value" data-role="progress">${progress.toFixed(1)}%</span></span>
+                <span class="job-detail"><span class="job-detail-value" data-role="speed">${speed.toFixed(2)}x</span></span>
+                <span class="job-detail">ETA: <span class="job-detail-value" data-role="eta">${etaValue}</span></span>
+                ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value" data-role="elapsed">${elapsed}</span></span>` : ''}
+            `;
+        }
+
+        function updateRunningDetails(detailsEl, progress, speed, etaValue, elapsed) {
+            if (!detailsEl) return;
+            const progressEl = detailsEl.querySelector('[data-role="progress"]');
+            const speedEl = detailsEl.querySelector('[data-role="speed"]');
+            const etaEl = detailsEl.querySelector('[data-role="eta"]');
+            const elapsedEl = detailsEl.querySelector('[data-role="elapsed"]');
+
+            if (!progressEl || !speedEl || !etaEl) {
+                detailsEl.innerHTML = renderRunningDetails(progress, speed, etaValue, elapsed);
+                return;
+            }
+
+            progressEl.textContent = `${progress.toFixed(1)}%`;
+            speedEl.textContent = `${speed.toFixed(2)}x`;
+            etaEl.textContent = etaValue;
+
+            if (elapsed) {
+                if (elapsedEl) {
+                    elapsedEl.textContent = elapsed;
+                } else {
+                    detailsEl.insertAdjacentHTML(
+                        'beforeend',
+                        `<span class="job-detail">Elapsed: <span class="job-detail-value" data-role="elapsed">${elapsed}</span></span>`
+                    );
+                }
+            } else if (elapsedEl) {
+                const elapsedDetail = elapsedEl.closest('.job-detail');
+                if (elapsedDetail) {
+                    elapsedDetail.remove();
+                }
+            }
+        }
+
+        function updateFileSort(value) {
+            fileListState.sort = value;
+            localStorage.setItem(storageKeys.fileSort, value);
+            renderFileList();
+        }
+
+        function updateFileFilter(value) {
+            fileListState.filter = value;
+            localStorage.setItem(storageKeys.fileFilter, value);
+            updateEmptyFolderToggleVisibility();
+            renderFileList();
+        }
+
+        function updateHideEmptyFolders(checked) {
+            fileListState.hideEmptyFolders = checked;
+            localStorage.setItem(storageKeys.hideEmptyFolders, String(checked));
+            renderFileList();
+        }
+
+        function updateEmptyFolderToggleVisibility() {
+            const container = document.getElementById('hide-empty-folders-container');
+            const checkbox = document.getElementById('hide-empty-folders');
+            if (fileListState.filter === 'workable') {
+                container.style.display = 'flex';
+                checkbox.checked = fileListState.hideEmptyFolders;
+            } else {
+                container.style.display = 'none';
+                checkbox.checked = false;
+                fileListState.hideEmptyFolders = false;
+            }
+        }
+
+        function getEntrySize(entry) {
+            if (entry.is_dir) {
+                return entry.total_size || 0;
+            }
+            return entry.size || 0;
+        }
+
+        function sortFileEntries(entries) {
+            const sorted = [...entries];
+            sorted.sort((a, b) => {
+                if (fileListState.sort === 'name') {
+                    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                }
+                if (fileListState.sort === 'size') {
+                    const sizeDiff = getEntrySize(b) - getEntrySize(a);
+                    if (sizeDiff !== 0) return sizeDiff;
+                    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                }
+                if (fileListState.sort === 'type') {
+                    if (a.is_dir !== b.is_dir) {
+                        return a.is_dir ? -1 : 1;
+                    }
+                    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                }
+                if (fileListState.sort === 'modified') {
+                    const timeA = new Date(a.mod_time).getTime() || 0;
+                    const timeB = new Date(b.mod_time).getTime() || 0;
+                    if (timeB !== timeA) return timeB - timeA;
+                    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                }
+                return 0;
+            });
+            return sorted;
+        }
+
+        function filterFileEntries(entries) {
+            if (fileListState.filter === 'workable') {
+                return entries.filter(entry => {
+                    if (entry.is_dir) {
+                        if (fileListState.hideEmptyFolders) {
+                            return (entry.file_count || 0) > 0;
+                        }
+                        return true;
+                    }
+                    return entry.video_info;
+                });
+            }
+            return entries;
+        }
+
+        function renderFileList() {
+            const list = document.getElementById('file-list');
+            const header = document.getElementById('file-list-header');
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+
+            if (!fileListEntries || fileListEntries.length === 0) {
+                list.innerHTML = '<li class="file-list-empty">This folder is empty</li>';
+                header.classList.add('hidden');
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+                return;
+            }
+
+            const filteredEntries = filterFileEntries(fileListEntries);
+            if (filteredEntries.length === 0) {
+                list.innerHTML = '<li class="file-list-empty">No items match the current filter</li>';
+                header.classList.add('hidden');
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+                return;
+            }
+
+            const sortedEntries = sortFileEntries(filteredEntries);
+
+            const hasSelectableItems = sortedEntries.some(entry =>
+                (!entry.is_dir && entry.video_info) || (entry.is_dir && (entry.file_count || 0) > 0)
+            );
+
+            if (hasSelectableItems) {
+                header.classList.remove('hidden');
+            } else {
+                header.classList.add('hidden');
+            }
+
+            list.innerHTML = sortedEntries.map(entry => {
+                const isVideo = !entry.is_dir && entry.video_info;
+                const hasVideos = entry.is_dir && (entry.file_count || 0) > 0;
+                const isSelectable = isVideo || hasVideos;
+                const iconClass = entry.is_dir ? 'folder' : (isVideo ? 'video' : 'other');
+                const icon = entry.is_dir
+                    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
+                    : isVideo
+                        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+                        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+
+                let metaHtml = '';
+                if (entry.is_dir) {
+                    const count = entry.file_count || 0;
+                    const processed = entry.processed_count || 0;
+                    metaHtml = `<span>${processed}/${count} processed</span>`;
+                } else if (isVideo) {
+                    const vi = entry.video_info;
+                    const codec = vi.video_codec?.toLowerCase() || '';
+                    let codecClass = 'h264';
+                    if (codec.includes('hevc') || codec.includes('h265')) {
+                        codecClass = 'hevc';
+                    } else if (codec.includes('av1')) {
+                        codecClass = 'av1';
+                    }
+                    metaHtml = `<span class="codec-badge ${codecClass}">${vi.video_codec}</span><span>${vi.width}x${vi.height}</span>`;
+                }
+
+                const count = entry.file_count || 0;
+                const processed = entry.processed_count || 0;
+                const isFullyProcessed = entry.is_dir ? count > 0 && processed === count : entry.processed;
+                const processedTag = isFullyProcessed ? '<span class="processed-tag">Processed</span>' : '';
+                const canMarkProcessed = isSelectable && !isFullyProcessed;
+                const markProcessedButton = canMarkProcessed
+                    ? `<button class="btn btn-secondary btn-sm file-action-btn" data-path="${escapeHtml(entry.path)}" onclick="handleMarkProcessedClick(event, this)">Mark Processed</button>`
+                    : '';
+                const isSelected = selectedPaths.has(entry.path);
+                const dblClickHandler = entry.is_dir ? ' ondblclick="handleFolderDoubleClick(this, event)"' : '';
+                return `<li class="file-item${isSelected ? ' selected' : ''}" data-path="${entry.path}" data-is-dir="${entry.is_dir}" onclick="handleFileClick(this, event)"${dblClickHandler}>
+                    ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}"${isSelected ? ' checked' : ''}>` : '<div style="width: 18px"></div>'}
+                    <div class="file-icon ${iconClass}">${icon}</div>
+                    <div class="file-info">
+                        <div class="file-name">${entry.name}</div>
+                        <div class="file-meta">${metaHtml}</div>
+                    </div>
+                    <div class="file-trailing">
+                        ${processedTag}
+                        ${markProcessedButton}
+                        <div class="file-size">${formatBytes(getEntrySize(entry))}</div>
+                    </div>
+                </li>`;
+            }).join('');
+
+            updateButtons();
+        }
+
         async function browse(path = '', preserveSelections = false) {
             try {
                 const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse';
@@ -2392,79 +2975,30 @@
 
                 // Update breadcrumb
                 const breadcrumb = document.getElementById('breadcrumb');
+                const parts = data.path.split('/').filter(Boolean);
                 let crumbs = `<a href="#" onclick="browse(''); return false;">Home</a>`;
-                if (data.parent) {
+                if (parts.length === 0) {
                     crumbs += `<span class="breadcrumb-sep">/</span>`;
-                    crumbs += `<a href="#" onclick="browse('${data.parent}'); return false;">...</a>`;
+                    crumbs += `<span class="breadcrumb-current">Root</span>`;
+                } else {
+                    let cumulativePath = '';
+                    parts.forEach((part, index) => {
+                        cumulativePath += `/${part}`;
+                        const isLast = index === parts.length - 1;
+                        crumbs += `<span class="breadcrumb-sep">/</span>`;
+                        if (isLast) {
+                            crumbs += `<span class="breadcrumb-current">${escapeHtml(part)}</span>`;
+                        } else {
+                            crumbs += `<a href="#" onclick="browse('${cumulativePath}'); return false;">${escapeHtml(part)}</a>`;
+                        }
+                    });
                 }
-                const currentFolder = data.path.split('/').pop() || 'Root';
-                crumbs += `<span class="breadcrumb-sep">/</span>`;
-                crumbs += `<span class="breadcrumb-current">${currentFolder}</span>`;
                 breadcrumb.innerHTML = crumbs;
 
                 // Update file list
-                const list = document.getElementById('file-list');
-                if (data.entries.length === 0) {
-                    list.innerHTML = '<li class="file-list-empty">This folder is empty</li>';
-                    document.getElementById('file-list-header').classList.add('hidden');
-                    return;
-                }
-
-                // Check if there are any selectable items (videos or folders with videos)
-                const hasSelectableItems = data.entries.some(e =>
-                    (!e.is_dir && e.video_info) || (e.is_dir && (e.file_count || 0) > 0)
-                );
-                const header = document.getElementById('file-list-header');
-                const selectAllCheckbox = document.getElementById('select-all-checkbox');
-
-                if (hasSelectableItems) {
-                    header.classList.remove('hidden');
-                } else {
-                    header.classList.add('hidden');
-                }
-                selectAllCheckbox.checked = false;
-                selectAllCheckbox.indeterminate = false;
-
-                list.innerHTML = data.entries.map(entry => {
-                    const isVideo = !entry.is_dir && entry.video_info;
-                    const hasVideos = entry.is_dir && (entry.file_count || 0) > 0;
-                    const isSelectable = isVideo || hasVideos;
-                    const iconClass = entry.is_dir ? 'folder' : (isVideo ? 'video' : 'other');
-                    const icon = entry.is_dir
-                        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
-                        : isVideo
-                            ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
-                            : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-
-                    let metaHtml = '';
-                    if (entry.is_dir) {
-                        const count = entry.file_count || 0;
-                        const size = formatBytes(entry.total_size || 0);
-                        metaHtml = `<span>${count} video${count !== 1 ? 's' : ''}</span><span>${size}</span>`;
-                    } else if (isVideo) {
-                        const vi = entry.video_info;
-                        const codec = vi.video_codec?.toLowerCase() || '';
-                        let codecClass = 'h264';
-                        if (codec.includes('hevc') || codec.includes('h265')) {
-                            codecClass = 'hevc';
-                        } else if (codec.includes('av1')) {
-                            codecClass = 'av1';
-                        }
-                        metaHtml = `<span class="codec-badge ${codecClass}">${vi.video_codec}</span><span>${vi.width}x${vi.height}</span>`;
-                    }
-
-                    const isSelected = selectedPaths.has(entry.path);
-                    const dblClickHandler = entry.is_dir ? ' ondblclick="handleFolderDoubleClick(this, event)"' : '';
-                    return `<li class="file-item${isSelected ? ' selected' : ''}" data-path="${entry.path}" data-is-dir="${entry.is_dir}" onclick="handleFileClick(this, event)"${dblClickHandler}>
-                        ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}"${isSelected ? ' checked' : ''}>` : '<div style="width: 18px"></div>'}
-                        <div class="file-icon ${iconClass}">${icon}</div>
-                        <div class="file-info">
-                            <div class="file-name">${entry.name}</div>
-                            <div class="file-meta">${metaHtml}</div>
-                        </div>
-                        <div class="file-size">${formatBytes(entry.size)}</div>
-                    </li>`;
-                }).join('');
+                fileListEntries = data.entries || [];
+                updateEmptyFolderToggleVisibility();
+                renderFileList();
 
             } catch (err) {
                 console.error('Browse error:', err);
@@ -2551,6 +3085,7 @@
         function updateButtons() {
             const hasSelection = selectedPaths.size > 0;
             document.getElementById('start-btn').disabled = !hasSelection;
+            document.getElementById('mark-processed-btn').disabled = !hasSelection;
 
             const summary = document.getElementById('selection-summary');
             if (hasSelection) {
@@ -2571,7 +3106,35 @@
         }
 
         function onPresetChange() {
-            // Preset changed - no action needed since estimation is removed
+            const preset = document.getElementById('preset-select').value;
+            preferredPresetId = preset;
+            localStorage.setItem(storageKeys.selectedPreset, preset);
+        }
+
+        function isEntryFullyProcessed(entry) {
+            if (!entry) return false;
+            if (entry.is_dir) {
+                const count = entry.file_count || 0;
+                const processed = entry.processed_count || 0;
+                return count > 0 && processed === count;
+            }
+            return !!entry.processed;
+        }
+
+        function clearSelections() {
+            selectedPaths.clear();
+            document.querySelectorAll('.file-item.selected').forEach(el => {
+                el.classList.remove('selected');
+                const cb = el.querySelector('.file-checkbox');
+                if (cb) cb.checked = false;
+            });
+            updateButtons();
+
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
         }
 
         async function startJobs() {
@@ -2580,13 +3143,26 @@
             try {
                 const preset = document.getElementById('preset-select').value;
                 const includeSubfolders = document.getElementById('include-subfolders').checked;
-                const pathCount = selectedPaths.size;
+                const entryMap = new Map((fileListEntries || []).map(entry => [entry.path, entry]));
+                const selectedPathList = Array.from(selectedPaths);
+                const selectedEntries = selectedPathList.map(path => entryMap.get(path)).filter(Boolean);
+                const processedPaths = new Set(selectedEntries.filter(isEntryFullyProcessed).map(entry => entry.path));
+                const hasProcessed = processedPaths.size > 0;
+                const hasUnprocessed = selectedPathList.some(path => !processedPaths.has(path));
+                let selectedJobPaths = selectedPathList;
+
+                if (hasProcessed && hasUnprocessed) {
+                    const includeProcessed = window.confirm('Some selected items are already processed. Include them in this transcode?');
+                    if (!includeProcessed) {
+                        selectedJobPaths = selectedPathList.filter(path => !processedPaths.has(path));
+                    }
+                }
 
                 const resp = await fetch('/api/jobs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        paths: Array.from(selectedPaths),
+                        paths: selectedJobPaths,
                         preset_id: preset,
                         include_subfolders: includeSubfolders
                     })
@@ -2600,23 +3176,57 @@
                 }
 
                 // Clear selections immediately - jobs will appear via SSE as they're processed
-                selectedPaths.clear();
-                document.querySelectorAll('.file-item.selected').forEach(el => {
-                    el.classList.remove('selected');
-                    const cb = el.querySelector('.file-checkbox');
-                    if (cb) cb.checked = false;
-                });
-                updateButtons();
-
-                // Reset select-all checkbox
-                const selectAllCheckbox = document.getElementById('select-all-checkbox');
-                if (selectAllCheckbox) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = false;
-                }
+                clearSelections();
 
             } catch (err) {
                 console.error('Start jobs error:', err);
+            }
+        }
+
+        function handleMarkProcessedClick(event, button) {
+            event.stopPropagation();
+            const path = button.dataset.path;
+            if (!path) return;
+            const includeSubfolders = document.getElementById('include-subfolders').checked;
+            markPathsProcessed([path], includeSubfolders);
+        }
+
+        async function markSelectedProcessed() {
+            if (selectedPaths.size === 0) return;
+            const includeSubfolders = document.getElementById('include-subfolders').checked;
+            const entryMap = new Map((fileListEntries || []).map(entry => [entry.path, entry]));
+            const selectedPathList = Array.from(selectedPaths);
+            const selectedEntries = selectedPathList.map(path => entryMap.get(path)).filter(Boolean);
+            const processedPaths = new Set(selectedEntries.filter(isEntryFullyProcessed).map(entry => entry.path));
+            const unprocessedPaths = selectedPathList.filter(path => !processedPaths.has(path));
+
+            if (unprocessedPaths.length === 0) {
+                alert('Selected items are already marked as processed.');
+                return;
+            }
+
+            await markPathsProcessed(unprocessedPaths, includeSubfolders);
+            clearSelections();
+        }
+
+        async function markPathsProcessed(paths, includeSubfolders) {
+            try {
+                const resp = await fetch('/api/processed/mark', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        paths: paths,
+                        include_subfolders: includeSubfolders
+                    })
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Failed to mark processed items');
+                }
+                await browse(currentPath, true);
+            } catch (err) {
+                console.error('Mark processed error:', err);
+                alert(err.message || 'Failed to mark processed items');
             }
         }
 
@@ -2625,6 +3235,42 @@
                 await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
             } catch (err) {
                 console.error('Cancel error:', err);
+            }
+        }
+
+        async function moveJob(id, direction) {
+            try {
+                const resp = await fetch(`/api/jobs/${id}/reorder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ direction })
+                });
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    throw new Error(data.error || 'Failed to move job');
+                }
+                refreshJobs();
+            } catch (err) {
+                console.error('Reorder error:', err);
+                alert(err.message || 'Failed to move job');
+            }
+        }
+
+        async function moveJobTo(id, beforeId) {
+            try {
+                const resp = await fetch(`/api/jobs/${id}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ before_id: beforeId || '' })
+                });
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    throw new Error(data.error || 'Failed to move job');
+                }
+                refreshJobs();
+            } catch (err) {
+                console.error('Move error:', err);
+                alert(err.message || 'Failed to move job');
             }
         }
 
@@ -2645,23 +3291,43 @@
                 'Clear Queue',
                 'This will remove all non-active jobs from the queue (including pending jobs). Your active jobs will not be affected.',
                 async () => {
+                    const removeCompleted = document.getElementById('confirm-modal-remove-completed').checked;
                     try {
-                        await fetch('/api/jobs/clear', { method: 'POST' });
+                        await fetch('/api/jobs/clear', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ include_completed: removeCompleted })
+                        });
                         refreshJobs();
                     } catch (err) {
                         console.error('Clear error:', err);
                     }
-                }
+                },
+                { showRemoveCompletedToggle: true, removeCompletedDefault: true }
             );
         }
 
         // Confirm Modal
         let confirmCallback = null;
 
-        function showConfirmModal(title, message, onConfirm) {
+        function showConfirmModal(title, message, onConfirm, options = {}) {
             document.getElementById('confirm-modal-title').textContent = title;
             document.getElementById('confirm-modal-message').textContent = message;
             confirmCallback = onConfirm;
+            const optionsEl = document.getElementById('confirm-modal-options');
+            const removeCompletedEl = document.getElementById('confirm-modal-remove-completed');
+            if (options.showRemoveCompletedToggle) {
+                optionsEl.style.display = 'block';
+                const stored = localStorage.getItem(storageKeys.clearRecentlyCompleted);
+                if (stored !== null) {
+                    removeCompletedEl.checked = stored === 'true';
+                } else {
+                    removeCompletedEl.checked = options.removeCompletedDefault !== false;
+                }
+            } else {
+                optionsEl.style.display = 'none';
+                removeCompletedEl.checked = true;
+            }
             document.getElementById('confirm-modal').classList.add('active');
         }
 
@@ -2711,25 +3377,24 @@
             const isPendingProbe = job.status === 'pending_probe';
             const statusClass = isInitializing ? 'initializing' : (isPendingProbe ? 'pending' : job.status);
             const statusLabel = isInitializing ? 'Initializing' : (isPendingProbe ? 'Scanning' : job.status.charAt(0).toUpperCase() + job.status.slice(1));
+            const canReorder = job.status === 'pending' || job.status === 'pending_probe';
 
             let detailsHtml = '';
             if (isPendingProbe) {
                 detailsHtml = '<span class="job-detail">Waiting to scan...</span>';
             } else if (job.status === 'running') {
+                const elapsed = formatElapsed(job);
                 if (isInitializing) {
                     detailsHtml = '<span class="job-detail">Starting encoder...</span>';
                 } else {
-                    detailsHtml = `
-                        <span class="job-detail"><span class="job-detail-value">${job.progress.toFixed(1)}%</span></span>
-                        <span class="job-detail"><span class="job-detail-value">${job.speed.toFixed(2)}x</span></span>
-                        <span class="job-detail">ETA: <span class="job-detail-value">${job.eta || '...'}</span></span>
-                    `;
+                    detailsHtml = renderRunningDetails(job.progress, job.speed, job.eta || '...', elapsed);
                 }
             } else if (job.status === 'complete') {
+                const elapsed = formatElapsed(job);
                 detailsHtml = `
                     <span class="job-detail job-saved">Saved <span class="job-detail-value">${formatBytes(job.space_saved)}</span></span>
                     <span class="job-detail">${formatBytes(job.input_size)} → ${formatBytes(job.output_size)}</span>
-                    ${job.transcode_secs ? `<span class="job-detail">in <span class="job-detail-value">${formatDuration(job.transcode_secs)}</span></span>` : ''}
+                    ${elapsed ? `<span class="job-detail">Elapsed: <span class="job-detail-value">${elapsed}</span></span>` : ''}
                 `;
             }
 
@@ -2739,7 +3404,7 @@
             const safeError = escapeHtml(job.error);
 
             return `
-                <div class="job-item" data-job-id="${safeId}">
+                <div class="job-item ${canReorder ? 'draggable' : ''}" data-job-id="${safeId}" ${canReorder ? 'draggable="true"' : ''}>
                     <div class="job-header">
                         <span class="job-name" title="${safePath}">${safeFilename}</span>
                         <div class="job-badges">
@@ -2760,6 +3425,10 @@
                     ${job.status === 'failed' ? renderErrorHelper(job) : ''}
                     ${job.status === 'pending' || job.status === 'pending_probe' || job.status === 'running' ? `
                         <div class="job-actions">
+                            ${canReorder ? `
+                                <button class="btn btn-secondary btn-sm" onclick="moveJob('${safeId}', 'up')" aria-label="Move job up">↑</button>
+                                <button class="btn btn-secondary btn-sm" onclick="moveJob('${safeId}', 'down')" aria-label="Move job down">↓</button>
+                            ` : ''}
                             <button class="btn btn-secondary btn-sm" onclick="cancelJob('${safeId}')">Cancel</button>
                         </div>
                     ` : ''}
@@ -2838,6 +3507,11 @@
                 }
             }
 
+            if (job.status !== 'failed') {
+                errorHelperExpanded.delete(job.id);
+                errorRawExpanded.delete(job.id);
+            }
+
             // If job completed, move it to the completed section
             if (job.status === 'complete') {
                 // Remove from main queue list
@@ -2871,6 +3545,7 @@
         function updateJobs(jobs) {
             const container = document.getElementById('queue-list');
             cachedJobs = jobs || [];
+            pruneErrorHelperState(cachedJobs);
 
             // Separate completed jobs from active queue
             const completedJobs = cachedJobs.filter(j => j.status === 'complete');
@@ -2929,8 +3604,130 @@
         }
 
         // ========================================
+        // Drag-and-drop Queue Reordering
+        // ========================================
+
+        let dragJobId = null;
+        let dragScrollTimer = null;
+
+        function getPendingOrderIds() {
+            return cachedJobs
+                .filter(job => job.status === 'pending' || job.status === 'pending_probe')
+                .map(job => job.id);
+        }
+
+        function stopDragScroll() {
+            if (dragScrollTimer) {
+                clearInterval(dragScrollTimer);
+                dragScrollTimer = null;
+            }
+        }
+
+        function startDragScroll(container, direction) {
+            if (dragScrollTimer) {
+                return;
+            }
+            dragScrollTimer = setInterval(() => {
+                container.scrollTop += direction * 18;
+            }, 16);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            if (!dragJobId) return;
+
+            const container = document.getElementById('queue-list');
+            if (!container) return;
+
+            const rect = container.getBoundingClientRect();
+            const offset = event.clientY - rect.top;
+            const edge = 48;
+            if (offset < edge) {
+                startDragScroll(container, -1);
+            } else if (offset > rect.height - edge) {
+                startDragScroll(container, 1);
+            } else {
+                stopDragScroll();
+            }
+        }
+
+        function attachQueueDragHandlers() {
+            const container = document.getElementById('queue-list');
+            if (!container) return;
+
+            container.addEventListener('dragstart', (event) => {
+                const item = event.target.closest('.job-item.draggable');
+                if (!item) return;
+                dragJobId = item.dataset.jobId;
+                item.classList.add('dragging');
+                event.dataTransfer.setData('text/plain', dragJobId);
+                event.dataTransfer.effectAllowed = 'move';
+            });
+
+            container.addEventListener('dragend', () => {
+                stopDragScroll();
+                dragJobId = null;
+                container.querySelectorAll('.job-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+                container.querySelectorAll('.job-item.dragging').forEach(el => el.classList.remove('dragging'));
+            });
+
+            container.addEventListener('dragover', handleDragOver);
+
+            container.addEventListener('dragenter', (event) => {
+                const item = event.target.closest('.job-item.draggable');
+                if (!item || item.dataset.jobId === dragJobId) return;
+                item.classList.add('drag-over');
+            });
+
+            container.addEventListener('dragleave', (event) => {
+                const item = event.target.closest('.job-item.draggable');
+                if (!item) return;
+                item.classList.remove('drag-over');
+            });
+
+            container.addEventListener('drop', (event) => {
+                event.preventDefault();
+                stopDragScroll();
+                const targetItem = event.target.closest('.job-item.draggable');
+                if (!dragJobId) return;
+
+                const pendingIds = getPendingOrderIds();
+                if (pendingIds.length === 0) return;
+
+                if (!targetItem) {
+                    moveJobTo(dragJobId, '');
+                    return;
+                }
+
+                const targetId = targetItem.dataset.jobId;
+                if (targetId === dragJobId) return;
+
+                const rect = targetItem.getBoundingClientRect();
+                const dropAfter = event.clientY > rect.top + rect.height / 2;
+                const targetIdx = pendingIds.indexOf(targetId);
+                if (targetIdx === -1) return;
+
+                const beforeId = dropAfter ? pendingIds[targetIdx + 1] : pendingIds[targetIdx];
+                moveJobTo(dragJobId, beforeId);
+            });
+        }
+
+        // ========================================
         // Completed Jobs Section
         // ========================================
+
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            if (!panel) {
+                return;
+            }
+
+            panel.classList.toggle('collapsed');
+            const toggleButton = panel.querySelector('.panel-toggle');
+            if (toggleButton) {
+                toggleButton.setAttribute('aria-expanded', String(!panel.classList.contains('collapsed')));
+            }
+        }
 
         function toggleCompletedSection() {
             const list = document.getElementById('completed-list');
@@ -2968,10 +3765,14 @@
                 const filename = job.input_path.split('/').pop();
                 const safeFilename = escapeHtml(filename);
                 const savedText = job.space_saved > 0 ? formatBytes(job.space_saved) : '—';
+                const elapsed = formatElapsed(job);
                 return `
                     <div class="completed-item">
                         <span class="completed-item-name" title="${escapeHtml(job.input_path)}">${safeFilename}</span>
-                        <span class="completed-item-saved">-${savedText}</span>
+                        <span class="completed-item-meta">
+                            <span class="completed-item-saved">-${savedText}</span>
+                            ${elapsed ? `<span class="completed-item-time">${elapsed}</span>` : ''}
+                        </span>
                     </div>
                 `;
             }).join('');
@@ -3011,6 +3812,7 @@
                     const isInitializing = job.progress === 0 && job.speed === 0;
                     const statusClass = isInitializing ? 'initializing' : 'running';
                     const statusLabel = isInitializing ? 'Initializing' : 'Running';
+                    const elapsed = formatElapsed(job);
 
                     const safeId = escapeHtml(job.id);
                     const safePath = escapeHtml(job.input_path);
@@ -3020,11 +3822,12 @@
                     if (isInitializing) {
                         detailsHtml = '<span class="job-detail">Starting encoder...</span>';
                     } else {
-                        detailsHtml = `
-                            <span class="job-detail"><span class="job-detail-value">${job.progress.toFixed(1)}%</span></span>
-                            <span class="job-detail"><span class="job-detail-value">${job.speed.toFixed(2)}x</span></span>
-                            <span class="job-detail">ETA: <span class="job-detail-value">${escapeHtml(job.eta) || '...'}</span></span>
-                        `;
+                        detailsHtml = renderRunningDetails(
+                            job.progress,
+                            job.speed,
+                            escapeHtml(job.eta) || '...',
+                            elapsed
+                        );
                     }
 
                     return `
@@ -3092,6 +3895,15 @@
         function updateActiveJobProgress(jobData) {
             const isInitializing = jobData.progress === 0 && jobData.speed === 0;
             const safeEta = escapeHtml(jobData.eta) || '...';
+            const cachedJob = cachedJobs.find(j => j.id === jobData.id);
+            if (cachedJob) {
+                cachedJob.progress = jobData.progress;
+                cachedJob.speed = jobData.speed;
+                cachedJob.eta = jobData.eta;
+            }
+            const elapsed = formatElapsed(cachedJob || jobData);
+
+            updateCachedJobProgress(jobData.id, jobData.progress, jobData.speed, jobData.eta);
 
             // Update active panel - find the specific job item by ID
             const nowProcessingContent = document.getElementById('now-processing-content');
@@ -3117,11 +3929,7 @@
                 if (isInitializing) {
                     activeDetails.innerHTML = '<span class="job-detail">Starting encoder...</span>';
                 } else {
-                    activeDetails.innerHTML = `
-                        <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
-                        <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
-                        <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
-                    `;
+                    updateRunningDetails(activeDetails, jobData.progress, jobData.speed, safeEta, elapsed);
                 }
             }
 
@@ -3133,8 +3941,9 @@
             }
 
             // Update the corresponding row in the queue list (use escaped selector)
+            const queueList = document.getElementById('queue-list');
             const safeSelector = `.job-item[data-job-id="${escapeCssSelector(jobData.id)}"]`;
-            const queueRow = document.querySelector(safeSelector);
+            const queueRow = queueList ? queueList.querySelector(safeSelector) : null;
             if (queueRow) {
                 // Update progress bar
                 const progressFill = queueRow.querySelector('.progress-fill');
@@ -3144,18 +3953,14 @@
                 }
 
                 // Update details
-                const detailsEl = queueRow.querySelector('.job-details');
-                if (detailsEl) {
-                    if (isInitializing) {
-                        detailsEl.innerHTML = '<span class="job-detail">Starting encoder...</span>';
-                    } else {
-                        detailsEl.innerHTML = `
-                            <span class="job-detail"><span class="job-detail-value">${jobData.progress.toFixed(1)}%</span></span>
-                            <span class="job-detail"><span class="job-detail-value">${jobData.speed.toFixed(2)}x</span></span>
-                            <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
-                        `;
-                    }
+            const detailsEl = queueRow.querySelector('.job-details');
+            if (detailsEl) {
+                if (isInitializing) {
+                    detailsEl.innerHTML = '<span class="job-detail">Starting encoder...</span>';
+                } else {
+                    updateRunningDetails(detailsEl, jobData.progress, jobData.speed, safeEta, elapsed);
                 }
+            }
 
                 // Update status badge
                 const statusBadge = queueRow.querySelector('.job-badge.running, .job-badge.initializing');
@@ -3164,15 +3969,10 @@
                     statusBadge.textContent = isInitializing ? 'Initializing' : 'Running';
                 }
             }
-
-            // Update cached job data
-            const cachedJob = cachedJobs.find(j => j.id === jobData.id);
-            if (cachedJob) {
-                cachedJob.progress = jobData.progress;
-                cachedJob.speed = jobData.speed;
-                cachedJob.eta = jobData.eta;
-            }
         }
+
+        // Update cached job data already handled above
+        
 
         // Performance: Handle batch of jobs added at once
         // This is called when AddMultiple() sends a single "batch_added" event
@@ -3231,6 +4031,7 @@
                 cachedJob.speed = speed;
                 cachedJob.eta = eta;
             }
+            const elapsed = formatElapsed(cachedJob);
 
             // Update active panel job
             const safeId = escapeCssSelector(id);
@@ -3245,18 +4046,14 @@
                 }
 
                 // Update details
-                const activeDetails = activeJobEl.querySelector('.job-details');
-                if (activeDetails) {
-                    if (isInitializing) {
-                        activeDetails.innerHTML = '<span class="job-detail">Starting encoder...</span>';
-                    } else {
-                        activeDetails.innerHTML = `
-                            <span class="job-detail"><span class="job-detail-value">${progress.toFixed(1)}%</span></span>
-                            <span class="job-detail"><span class="job-detail-value">${speed.toFixed(2)}x</span></span>
-                            <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
-                        `;
-                    }
+            const activeDetails = activeJobEl.querySelector('.job-details');
+            if (activeDetails) {
+                if (isInitializing) {
+                    activeDetails.innerHTML = '<span class="job-detail">Starting encoder...</span>';
+                } else {
+                    updateRunningDetails(activeDetails, progress, speed, safeEta, elapsed);
                 }
+            }
 
                 // Update status badge
                 const activeBadge = activeJobEl.querySelector('.job-badge.running, .job-badge.initializing');
@@ -3267,7 +4064,8 @@
             }
 
             // Update queue list row
-            const queueRow = document.querySelector(`.job-item[data-job-id="${safeId}"]`);
+            const queueList = document.getElementById('queue-list');
+            const queueRow = queueList ? queueList.querySelector(`.job-item[data-job-id="${safeId}"]`) : null;
             if (queueRow) {
                 const progressFill = queueRow.querySelector('.progress-fill');
                 if (progressFill) {
@@ -3275,18 +4073,14 @@
                     progressFill.className = 'progress-fill' + (isInitializing ? ' initializing' : '');
                 }
 
-                const detailsEl = queueRow.querySelector('.job-details');
-                if (detailsEl) {
-                    if (isInitializing) {
-                        detailsEl.innerHTML = '<span class="job-detail">Starting encoder...</span>';
-                    } else {
-                        detailsEl.innerHTML = `
-                            <span class="job-detail"><span class="job-detail-value">${progress.toFixed(1)}%</span></span>
-                            <span class="job-detail"><span class="job-detail-value">${speed.toFixed(2)}x</span></span>
-                            <span class="job-detail">ETA: <span class="job-detail-value">${safeEta}</span></span>
-                        `;
-                    }
+            const detailsEl = queueRow.querySelector('.job-details');
+            if (detailsEl) {
+                if (isInitializing) {
+                    detailsEl.innerHTML = '<span class="job-detail">Starting encoder...</span>';
+                } else {
+                    updateRunningDetails(detailsEl, progress, speed, safeEta, elapsed);
                 }
+            }
 
                 const statusBadge = queueRow.querySelector('.job-badge.running, .job-badge.initializing');
                 if (statusBadge) {
@@ -3309,6 +4103,7 @@
                 } else if (data.type === 'notify_sent') {
                     // Notification was sent, uncheck the checkbox
                     document.getElementById('notify-checkbox').checked = false;
+                    localStorage.setItem(storageKeys.notifyOnComplete, 'false');
                 } else if (data.type === 'batch_added' && data.jobs) {
                     // Performance: Handle batch of jobs in single DOM operation
                     handleBatchAdded(data.jobs);
@@ -3372,12 +4167,22 @@
                 document.getElementById('setting-pushover-user').value = config.pushover_user_key || '';
                 document.getElementById('setting-pushover-token').value = config.pushover_app_token || '';
 
-                // Show/hide notify checkbox based on whether Pushover is configured
+                // ntfy settings
+                document.getElementById('setting-ntfy-server').value = config.ntfy_server || '';
+                document.getElementById('setting-ntfy-topic').value = config.ntfy_topic || '';
+                document.getElementById('setting-ntfy-token').value = config.ntfy_token || '';
+
+                // Show/hide notify checkbox based on whether any provider is configured
                 const notifyContainer = document.getElementById('notify-container');
                 const notifyCheckbox = document.getElementById('notify-checkbox');
-                if (config.pushover_configured) {
+                if (config.pushover_configured || config.ntfy_configured) {
                     notifyContainer.style.display = 'flex';
-                    notifyCheckbox.checked = config.notify_on_complete || false;
+                    const storedNotify = localStorage.getItem(storageKeys.notifyOnComplete);
+                    const notifyValue = storedNotify !== null ? storedNotify === 'true' : (config.notify_on_complete || false);
+                    notifyCheckbox.checked = notifyValue;
+                    if (notifyValue !== (config.notify_on_complete || false)) {
+                        updateNotifySetting(notifyValue);
+                    }
                 } else {
                     notifyContainer.style.display = 'none';
                 }
@@ -3422,7 +4227,7 @@
                 setTimeout(() => { statusEl.textContent = ''; }, 2000);
 
                 // Reload settings to update notify checkbox visibility
-                if (key === 'pushover_user_key' || key === 'pushover_app_token') {
+                if (key === 'pushover_user_key' || key === 'pushover_app_token' || key === 'ntfy_server' || key === 'ntfy_topic' || key === 'ntfy_token') {
                     loadSettings();
                 }
             } catch (err) {
@@ -3431,7 +4236,34 @@
             }
         }
 
+        async function clearProcessedHistory() {
+            const statusEl = document.getElementById('settings-status');
+            const confirmed = window.confirm('Clear processed history? This will reset processed badges and counts.');
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/processed/clear', { method: 'POST' });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Failed to clear processed history');
+                }
+
+                statusEl.textContent = data.message || 'Processed history cleared';
+                statusEl.className = 'settings-status';
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+
+                browse(currentPath, true);
+            } catch (err) {
+                statusEl.textContent = `Error: ${err.message}`;
+                statusEl.className = 'settings-status error';
+            }
+        }
+
         async function updateNotifySetting(checked) {
+            localStorage.setItem(storageKeys.notifyOnComplete, String(checked));
             try {
                 await fetch('/api/config', {
                     method: 'PUT',
@@ -3469,6 +4301,32 @@
             }
         }
 
+        async function testNtfy() {
+            const btn = document.getElementById('test-ntfy-btn');
+            const statusEl = document.getElementById('settings-status');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            try {
+                const resp = await fetch('/api/ntfy/test', { method: 'POST' });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Failed to send test');
+                }
+
+                statusEl.textContent = 'Test notification sent!';
+                statusEl.className = 'settings-status';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            } catch (err) {
+                statusEl.textContent = `Error: ${err.message}`;
+                statusEl.className = 'settings-status error';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Test';
+            }
+        }
+
         async function loadPresets() {
             try {
                 const presets = await fetch('/api/presets').then(r => r.json());
@@ -3476,9 +4334,49 @@
                 select.innerHTML = presets.map(p =>
                     `<option value="${p.id}">${p.name}</option>`
                 ).join('');
+                if (preferredPresetId && presets.some(p => p.id === preferredPresetId)) {
+                    select.value = preferredPresetId;
+                }
             } catch (err) {
                 console.error('Load presets error:', err);
             }
+        }
+
+        function loadLocalPreferences() {
+            const storedSort = localStorage.getItem(storageKeys.fileSort);
+            const storedFilter = localStorage.getItem(storageKeys.fileFilter);
+            const storedHideEmptyFolders = localStorage.getItem(storageKeys.hideEmptyFolders);
+
+            if (storedSort) {
+                fileListState.sort = storedSort;
+                document.getElementById('file-sort').value = storedSort;
+            }
+
+            if (storedFilter) {
+                fileListState.filter = storedFilter;
+                document.getElementById('file-filter').value = storedFilter;
+            }
+
+            if (storedHideEmptyFolders !== null) {
+                fileListState.hideEmptyFolders = storedHideEmptyFolders === 'true';
+            }
+
+            const includeSubfolders = localStorage.getItem(storageKeys.includeSubfolders);
+            if (includeSubfolders !== null) {
+                document.getElementById('include-subfolders').checked = includeSubfolders === 'true';
+            }
+
+            updateEmptyFolderToggleVisibility();
+        }
+
+        function bindPreferenceHandlers() {
+            document.getElementById('include-subfolders').addEventListener('change', (event) => {
+                localStorage.setItem(storageKeys.includeSubfolders, String(event.target.checked));
+            });
+
+            document.getElementById('confirm-modal-remove-completed').addEventListener('change', (event) => {
+                localStorage.setItem(storageKeys.clearRecentlyCompleted, String(event.target.checked));
+            });
         }
 
         // Keyboard shortcut for settings
@@ -3489,7 +4387,10 @@
         });
 
         // Initialize
+        loadLocalPreferences();
+        bindPreferenceHandlers();
         browse();
+        attachQueueDragHandlers();
         connectSSE();
         loadSettings();
         loadPresets();

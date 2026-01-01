@@ -13,10 +13,12 @@ import (
 
 // Queue manages the job queue with persistence
 type Queue struct {
-	mu       sync.RWMutex
-	jobs     map[string]*Job
-	order    []string // Job IDs in order of creation
-	filePath string   // Path to persistence file
+	mu             sync.RWMutex
+	jobs           map[string]*Job
+	order          []string             // Job IDs in order of creation
+	filePath       string               // Path to persistence file
+	processedPaths map[string]time.Time // All successfully processed input paths
+	totalSaved     int64                // Total bytes saved across completed job history
 
 	// Subscribers for job events
 	subsMu      sync.RWMutex
@@ -29,11 +31,12 @@ type Queue struct {
 // NewQueue creates a new job queue, optionally loading from a persistence file
 func NewQueue(filePath string) (*Queue, error) {
 	q := &Queue{
-		jobs:          make(map[string]*Job),
-		order:         make([]string, 0),
-		filePath:      filePath,
-		subscribers:   make(map[chan JobEvent]struct{}),
-		fallbackTimes: make([]time.Time, 0),
+		jobs:           make(map[string]*Job),
+		order:          make([]string, 0),
+		filePath:       filePath,
+		processedPaths: make(map[string]time.Time),
+		subscribers:    make(map[chan JobEvent]struct{}),
+		fallbackTimes:  make([]time.Time, 0),
 	}
 
 	// Try to load existing queue
@@ -48,8 +51,10 @@ func NewQueue(filePath string) (*Queue, error) {
 
 // persistenceData is the structure saved to disk
 type persistenceData struct {
-	Jobs  []*Job `json:"jobs"`
-	Order []string `json:"order"`
+	Jobs           []*Job               `json:"jobs"`
+	Order          []string             `json:"order"`
+	ProcessedPaths map[string]time.Time `json:"processed_paths,omitempty"`
+	TotalSaved     *int64               `json:"total_saved,omitempty"`
 }
 
 // load reads the queue from disk
@@ -73,6 +78,25 @@ func (q *Queue) load() error {
 		q.jobs[job.ID] = job
 	}
 	q.order = pd.Order
+	if pd.ProcessedPaths != nil {
+		q.processedPaths = pd.ProcessedPaths
+	} else {
+		q.processedPaths = make(map[string]time.Time)
+		for _, job := range q.jobs {
+			if job.Status == StatusComplete {
+				q.recordProcessedPathLocked(job.InputPath, job.CompletedAt)
+			}
+		}
+	}
+	if pd.TotalSaved != nil {
+		q.totalSaved = *pd.TotalSaved
+	} else {
+		for _, job := range q.jobs {
+			if job.Status == StatusComplete {
+				q.totalSaved += job.SpaceSaved
+			}
+		}
+	}
 
 	// Reset any running jobs to pending (they were interrupted)
 	for _, job := range q.jobs {
@@ -107,9 +131,12 @@ func (q *Queue) save() error {
 		}
 	}
 
+	totalSaved := q.totalSaved
 	pd := persistenceData{
-		Jobs:  jobs,
-		Order: q.order,
+		Jobs:           jobs,
+		Order:          q.order,
+		ProcessedPaths: q.processedPaths,
+		TotalSaved:     &totalSaved,
 	}
 
 	data, err := json.MarshalIndent(pd, "", "  ")
@@ -191,8 +218,8 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string) ([]*J
 	q.mu.Lock()
 
 	allJobs := make([]*Job, 0, len(probes))
-	addedJobs := make([]*Job, 0, len(probes))   // Jobs successfully added (pending)
-	skippedJobs := make([]*Job, 0)               // Jobs that failed skip-reason check
+	addedJobs := make([]*Job, 0, len(probes)) // Jobs successfully added (pending)
+	skippedJobs := make([]*Job, 0)            // Jobs that failed skip-reason check
 
 	preset := ffmpeg.GetPreset(presetID)
 	encoder := string(ffmpeg.HWAccelNone)
@@ -284,8 +311,8 @@ func (q *Queue) AddWithoutProbe(inputPath string, presetID string, fileSize int6
 		IsHardware: isHardware,
 		Status:     StatusPendingProbe, // Will be probed when worker picks it up
 		InputSize:  fileSize,           // File size is known from directory listing
-		Duration:   0,                   // Will be populated after probe
-		Bitrate:    0,                   // Will be populated after probe
+		Duration:   0,                  // Will be populated after probe
+		Bitrate:    0,                  // Will be populated after probe
 		CreatedAt:  time.Now(),
 	}
 
@@ -579,6 +606,9 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 		return fmt.Errorf("job not found: %s", id)
 	}
 
+	wasComplete := job.Status == StatusComplete
+	previousSaved := job.SpaceSaved
+
 	job.Status = StatusComplete
 	job.Progress = 100
 	job.OutputPath = outputPath
@@ -587,6 +617,13 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 	job.CompletedAt = time.Now()
 	job.TranscodeTime = int64(job.CompletedAt.Sub(job.StartedAt).Seconds())
 	job.TempPath = "" // Clear temp path
+	q.recordProcessedPathLocked(job.InputPath, job.CompletedAt)
+
+	if wasComplete {
+		q.totalSaved += job.SpaceSaved - previousSaved
+	} else {
+		q.totalSaved += job.SpaceSaved
+	}
 
 	if err := q.save(); err != nil {
 		fmt.Printf("Warning: failed to persist queue: %v\n", err)
@@ -595,6 +632,69 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 	q.broadcast(JobEvent{Type: "complete", Job: job})
 
 	return nil
+}
+
+// ProcessedPaths returns a copy of processed input paths.
+func (q *Queue) ProcessedPaths() map[string]struct{} {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	paths := make(map[string]struct{}, len(q.processedPaths))
+	for path := range q.processedPaths {
+		paths[path] = struct{}{}
+	}
+	return paths
+}
+
+// MarkProcessedPaths records input paths as processed.
+// Returns the number of new entries added.
+func (q *Queue) MarkProcessedPaths(paths []string) int {
+	if len(paths) == 0 {
+		return 0
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	added := 0
+	now := time.Now()
+	for _, path := range paths {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			absPath = path
+		}
+		if _, ok := q.processedPaths[absPath]; !ok {
+			added++
+		}
+		q.processedPaths[absPath] = now
+	}
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	return added
+}
+
+// ClearProcessedHistory removes all recorded processed paths.
+func (q *Queue) ClearProcessedHistory() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	count := len(q.processedPaths)
+	q.processedPaths = make(map[string]time.Time)
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+	return count
+}
+
+func (q *Queue) recordProcessedPathLocked(inputPath string, completedAt time.Time) {
+	absPath, err := filepath.Abs(inputPath)
+	if err != nil {
+		absPath = inputPath
+	}
+	q.processedPaths[absPath] = completedAt
 }
 
 // FailJobDetails contains optional diagnostic information for failed jobs
@@ -666,9 +766,10 @@ func (q *Queue) CancelJob(id string) error {
 	return nil
 }
 
-// Clear removes all non-running jobs from the queue (pending, completed, failed, cancelled)
-// Only running jobs are kept.
-func (q *Queue) Clear() int {
+// Clear removes all non-running jobs from the queue.
+// If includeCompleted is false, completed jobs are kept.
+// Only running jobs are always kept.
+func (q *Queue) Clear(includeCompleted bool) int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -679,8 +780,8 @@ func (q *Queue) Clear() int {
 		if !ok {
 			continue
 		}
-		if job.Status == StatusRunning {
-			// Keep only running jobs
+		if job.Status == StatusRunning || (!includeCompleted && job.Status == StatusComplete) {
+			// Keep running jobs (and completed if requested)
 			newOrder = append(newOrder, id)
 		} else {
 			delete(q.jobs, id)
@@ -715,6 +816,162 @@ func (q *Queue) Remove(id string) {
 	if err := q.save(); err != nil {
 		fmt.Printf("Warning: failed to persist queue: %v\n", err)
 	}
+}
+
+// ReorderPending moves a pending job up or down within the pending queue order.
+// Only pending or pending_probe jobs can be reordered.
+// Returns true if the order changed.
+func (q *Queue) ReorderPending(id string, direction string) (bool, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return false, fmt.Errorf("job not found: %s", id)
+	}
+	if job.Status != StatusPending && job.Status != StatusPendingProbe {
+		return false, fmt.Errorf("job not pending: %s", job.Status)
+	}
+
+	if direction != "up" && direction != "down" {
+		return false, fmt.Errorf("invalid direction: %s", direction)
+	}
+
+	pendingIDs := make([]string, 0)
+	for _, jid := range q.order {
+		if queued, ok := q.jobs[jid]; ok && (queued.Status == StatusPending || queued.Status == StatusPendingProbe) {
+			pendingIDs = append(pendingIDs, jid)
+		}
+	}
+
+	currentIdx := -1
+	for idx, jid := range pendingIDs {
+		if jid == id {
+			currentIdx = idx
+			break
+		}
+	}
+	if currentIdx == -1 {
+		return false, fmt.Errorf("job not found in pending order: %s", id)
+	}
+
+	targetIdx := currentIdx
+	if direction == "up" && currentIdx > 0 {
+		targetIdx = currentIdx - 1
+	}
+	if direction == "down" && currentIdx < len(pendingIDs)-1 {
+		targetIdx = currentIdx + 1
+	}
+	if targetIdx == currentIdx {
+		return false, nil
+	}
+
+	pendingIDs[currentIdx], pendingIDs[targetIdx] = pendingIDs[targetIdx], pendingIDs[currentIdx]
+
+	newOrder := make([]string, 0, len(q.order))
+	pendingPos := 0
+	for _, jid := range q.order {
+		if queued, ok := q.jobs[jid]; ok && (queued.Status == StatusPending || queued.Status == StatusPendingProbe) {
+			newOrder = append(newOrder, pendingIDs[pendingPos])
+			pendingPos++
+			continue
+		}
+		newOrder = append(newOrder, jid)
+	}
+	q.order = newOrder
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	q.broadcast(JobEvent{Type: "reordered"})
+	return true, nil
+}
+
+// MovePending moves a pending job before another pending job ID.
+// If beforeID is empty, the job is moved to the end of pending jobs.
+// Returns true if the order changed.
+func (q *Queue) MovePending(id string, beforeID string) (bool, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return false, fmt.Errorf("job not found: %s", id)
+	}
+	if job.Status != StatusPending && job.Status != StatusPendingProbe {
+		return false, fmt.Errorf("job not pending: %s", job.Status)
+	}
+
+	pendingIDs := make([]string, 0)
+	for _, jid := range q.order {
+		if queued, ok := q.jobs[jid]; ok && (queued.Status == StatusPending || queued.Status == StatusPendingProbe) {
+			pendingIDs = append(pendingIDs, jid)
+		}
+	}
+
+	currentIdx := -1
+	for idx, jid := range pendingIDs {
+		if jid == id {
+			currentIdx = idx
+			break
+		}
+	}
+	if currentIdx == -1 {
+		return false, fmt.Errorf("job not found in pending order: %s", id)
+	}
+
+	targetIdx := len(pendingIDs)
+	if beforeID != "" {
+		found := false
+		for idx, jid := range pendingIDs {
+			if jid == beforeID {
+				targetIdx = idx
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false, fmt.Errorf("before job not found in pending order: %s", beforeID)
+		}
+	}
+
+	if currentIdx == targetIdx || currentIdx+1 == targetIdx {
+		return false, nil
+	}
+
+	updated := make([]string, 0, len(pendingIDs))
+	for idx, jid := range pendingIDs {
+		if idx == currentIdx {
+			continue
+		}
+		if idx == targetIdx {
+			updated = append(updated, id)
+		}
+		updated = append(updated, jid)
+	}
+	if targetIdx == len(pendingIDs) {
+		updated = append(updated, id)
+	}
+
+	newOrder := make([]string, 0, len(q.order))
+	pendingPos := 0
+	for _, jid := range q.order {
+		if queued, ok := q.jobs[jid]; ok && (queued.Status == StatusPending || queued.Status == StatusPendingProbe) {
+			newOrder = append(newOrder, updated[pendingPos])
+			pendingPos++
+			continue
+		}
+		newOrder = append(newOrder, jid)
+	}
+	q.order = newOrder
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	q.broadcast(JobEvent{Type: "reordered"})
+	return true, nil
 }
 
 // Subscribe returns a channel that receives job events
@@ -767,7 +1024,7 @@ func (q *Queue) Stats() Stats {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
-	var stats Stats
+	stats := Stats{TotalSaved: q.totalSaved}
 	for _, job := range q.jobs {
 		stats.Total++
 		switch job.Status {
@@ -779,13 +1036,13 @@ func (q *Queue) Stats() Stats {
 			stats.Running++
 		case StatusComplete:
 			stats.Complete++
-			stats.TotalSaved += job.SpaceSaved
 		case StatusFailed:
 			stats.Failed++
 		case StatusCancelled:
 			stats.Cancelled++
 		}
 	}
+	stats.TotalSaved = q.totalSaved
 	return stats
 }
 

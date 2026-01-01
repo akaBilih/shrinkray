@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/gwlsn/shrinkray/internal/config"
 	"github.com/gwlsn/shrinkray/internal/ffmpeg"
 	"github.com/gwlsn/shrinkray/internal/jobs"
+	"github.com/gwlsn/shrinkray/internal/ntfy"
 	"github.com/gwlsn/shrinkray/internal/pushover"
 )
 
@@ -25,6 +29,7 @@ type Handler struct {
 	cfg        *config.Config
 	cfgPath    string
 	pushover   *pushover.Client
+	ntfy       *ntfy.Client
 	notifyMu   sync.Mutex // Protects notification sending to prevent duplicates
 }
 
@@ -37,6 +42,7 @@ func NewHandler(browser *browse.Browser, queue *jobs.Queue, workerPool *jobs.Wor
 		cfg:        cfg,
 		cfgPath:    cfgPath,
 		pushover:   pushover.NewClient(cfg.PushoverUserKey, cfg.PushoverAppToken),
+		ntfy:       ntfy.NewClient(cfg.NtfyServer, cfg.NtfyTopic, cfg.NtfyToken),
 	}
 }
 
@@ -68,7 +74,34 @@ func (h *Handler) Browse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	processedPaths := h.queue.ProcessedPaths()
+	if len(processedPaths) > 0 {
+		for _, entry := range result.Entries {
+			if entry.IsDir {
+				entry.ProcessedCount = countProcessedInDir(entry.Path, processedPaths)
+				continue
+			}
+			if _, ok := processedPaths[entry.Path]; ok {
+				entry.Processed = true
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, result)
+}
+
+func countProcessedInDir(dirPath string, processedPaths map[string]struct{}) int {
+	if len(processedPaths) == 0 {
+		return 0
+	}
+	prefix := dirPath + string(os.PathSeparator)
+	count := 0
+	for path := range processedPaths {
+		if strings.HasPrefix(path, prefix) {
+			count++
+		}
+	}
+	return count
 }
 
 // Presets handles GET /api/presets
@@ -94,6 +127,12 @@ type CreateJobsRequest struct {
 	PresetID          string   `json:"preset_id"`
 	IncludeSubfolders *bool    `json:"include_subfolders,omitempty"` // Default: true (for backwards compatibility)
 	MaxDepth          *int     `json:"max_depth,omitempty"`          // nil = unlimited, 0 = current dir only, 1 = one level, etc.
+}
+
+// MarkProcessedRequest is the request body for marking processed paths.
+type MarkProcessedRequest struct {
+	Paths             []string `json:"paths"`
+	IncludeSubfolders *bool    `json:"include_subfolders,omitempty"`
 }
 
 // CreateJobs handles POST /api/jobs
@@ -191,6 +230,53 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
+// MarkProcessed handles POST /api/processed/mark
+func (h *Handler) MarkProcessed(w http.ResponseWriter, r *http.Request) {
+	var req MarkProcessedRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if len(req.Paths) == 0 {
+		writeError(w, http.StatusBadRequest, "no paths provided")
+		return
+	}
+
+	opts := browse.GetVideoFilesOptions{
+		Recursive: true,
+		MaxDepth:  nil,
+	}
+	if req.IncludeSubfolders != nil {
+		opts.Recursive = *req.IncludeSubfolders
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+
+	files, err := h.browser.DiscoverVideoFiles(ctx, req.Paths, opts)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if len(files) == 0 {
+		writeError(w, http.StatusBadRequest, "no video files found")
+		return
+	}
+
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.Path)
+	}
+
+	added := h.queue.MarkProcessedPaths(paths)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"processed": added,
+		"total":     len(paths),
+	})
+}
+
 // ListJobs handles GET /api/jobs
 func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	allJobs := h.queue.GetAll()
@@ -249,12 +335,119 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
+// ReorderJob handles POST /api/jobs/:id/reorder
+func (h *Handler) ReorderJob(w http.ResponseWriter, r *http.Request) {
+	type reorderJobRequest struct {
+		Direction string `json:"direction"`
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	job := h.queue.Get(id)
+	if job == nil {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+
+	if job.Status != jobs.StatusPending && job.Status != jobs.StatusPendingProbe {
+		writeError(w, http.StatusConflict, "job is not pending")
+		return
+	}
+
+	var req reorderJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Direction == "" {
+		writeError(w, http.StatusBadRequest, "direction required")
+		return
+	}
+
+	moved, err := h.queue.ReorderPending(id, req.Direction)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"moved": moved,
+	})
+}
+
+// MoveJob handles POST /api/jobs/:id/move
+func (h *Handler) MoveJob(w http.ResponseWriter, r *http.Request) {
+	type moveJobRequest struct {
+		BeforeID string `json:"before_id"`
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	job := h.queue.Get(id)
+	if job == nil {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+
+	if job.Status != jobs.StatusPending && job.Status != jobs.StatusPendingProbe {
+		writeError(w, http.StatusConflict, "job is not pending")
+		return
+	}
+
+	var req moveJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	moved, err := h.queue.MovePending(id, req.BeforeID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"moved": moved,
+	})
+}
+
 // ClearQueue handles POST /api/jobs/clear
 func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
-	count := h.queue.Clear()
+	type clearQueueRequest struct {
+		IncludeCompleted *bool `json:"include_completed"`
+	}
+
+	includeCompleted := true
+	var req clearQueueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.IncludeCompleted != nil {
+		includeCompleted = *req.IncludeCompleted
+	}
+
+	count := h.queue.Clear(includeCompleted)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"cleared": count,
 		"message": fmt.Sprintf("Cleared %d jobs", count),
+	})
+}
+
+// ClearProcessedHistory handles POST /api/processed/clear
+func (h *Handler) ClearProcessedHistory(w http.ResponseWriter, r *http.Request) {
+	count := h.queue.ClearProcessedHistory()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"cleared": count,
+		"message": fmt.Sprintf("Cleared %d processed items", count),
 	})
 }
 
@@ -270,6 +463,10 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"pushover_user_key":   h.cfg.PushoverUserKey,
 		"pushover_app_token":  h.cfg.PushoverAppToken,
 		"pushover_configured": h.pushover.IsConfigured(),
+		"ntfy_server":         h.cfg.NtfyServer,
+		"ntfy_topic":          h.cfg.NtfyTopic,
+		"ntfy_token":          h.cfg.NtfyToken,
+		"ntfy_configured":     h.ntfy.IsConfigured(),
 		"notify_on_complete":  h.cfg.NotifyOnComplete,
 		// Feature flags for frontend
 		"features": map[string]bool{
@@ -288,6 +485,9 @@ type UpdateConfigRequest struct {
 	Workers          *int    `json:"workers,omitempty"`
 	PushoverUserKey  *string `json:"pushover_user_key,omitempty"`
 	PushoverAppToken *string `json:"pushover_app_token,omitempty"`
+	NtfyServer       *string `json:"ntfy_server,omitempty"`
+	NtfyTopic        *string `json:"ntfy_topic,omitempty"`
+	NtfyToken        *string `json:"ntfy_token,omitempty"`
 	NotifyOnComplete *bool   `json:"notify_on_complete,omitempty"`
 }
 
@@ -326,6 +526,18 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		h.cfg.PushoverAppToken = *req.PushoverAppToken
 		h.pushover.AppToken = *req.PushoverAppToken
 	}
+	if req.NtfyServer != nil {
+		h.cfg.NtfyServer = *req.NtfyServer
+		h.ntfy.ServerURL = *req.NtfyServer
+	}
+	if req.NtfyTopic != nil {
+		h.cfg.NtfyTopic = *req.NtfyTopic
+		h.ntfy.Topic = *req.NtfyTopic
+	}
+	if req.NtfyToken != nil {
+		h.cfg.NtfyToken = *req.NtfyToken
+		h.ntfy.Token = *req.NtfyToken
+	}
 	if req.NotifyOnComplete != nil {
 		h.cfg.NotifyOnComplete = *req.NotifyOnComplete
 	}
@@ -361,6 +573,21 @@ func (h *Handler) TestPushover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.pushover.Test(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "Test notification sent"})
+}
+
+// TestNtfy handles POST /api/ntfy/test
+func (h *Handler) TestNtfy(w http.ResponseWriter, r *http.Request) {
+	if !h.ntfy.IsConfigured() {
+		writeError(w, http.StatusBadRequest, "ntfy credentials not configured")
+		return
+	}
+
+	if err := h.ntfy.Test(); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

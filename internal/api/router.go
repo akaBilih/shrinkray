@@ -23,6 +23,10 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool) *http.ServeMux {
 	mux.HandleFunc("GET /api/jobs/{id}", h.GetJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.CancelJob)
 	mux.HandleFunc("POST /api/jobs/{id}/retry", h.RetryJob)
+	mux.HandleFunc("POST /api/jobs/{id}/reorder", h.ReorderJob)
+	mux.HandleFunc("POST /api/jobs/{id}/move", h.MoveJob)
+	mux.HandleFunc("POST /api/processed/clear", h.ClearProcessedHistory)
+	mux.HandleFunc("POST /api/processed/mark", h.MarkProcessed)
 
 	mux.HandleFunc("GET /api/config", h.GetConfig)
 	mux.HandleFunc("PUT /api/config", h.UpdateConfig)
@@ -30,6 +34,7 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool) *http.ServeMux {
 	mux.HandleFunc("GET /api/stats", h.Stats)
 	mux.HandleFunc("POST /api/cache/clear", h.ClearCache)
 	mux.HandleFunc("POST /api/pushover/test", h.TestPushover)
+	mux.HandleFunc("POST /api/ntfy/test", h.TestNtfy)
 
 	// Determine which UI to serve
 	uiPath := "web/templates"
@@ -104,6 +109,10 @@ func NewRouterWithoutStatic(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /api/jobs/{id}", h.GetJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.CancelJob)
 	mux.HandleFunc("POST /api/jobs/{id}/retry", h.RetryJob)
+	mux.HandleFunc("POST /api/jobs/{id}/reorder", h.ReorderJob)
+	mux.HandleFunc("POST /api/jobs/{id}/move", h.MoveJob)
+	mux.HandleFunc("POST /api/processed/clear", h.ClearProcessedHistory)
+	mux.HandleFunc("POST /api/processed/mark", h.MarkProcessed)
 
 	mux.HandleFunc("GET /api/config", h.GetConfig)
 	mux.HandleFunc("PUT /api/config", h.UpdateConfig)
@@ -111,6 +120,7 @@ func NewRouterWithoutStatic(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /api/stats", h.Stats)
 	mux.HandleFunc("POST /api/cache/clear", h.ClearCache)
 	mux.HandleFunc("POST /api/pushover/test", h.TestPushover)
+	mux.HandleFunc("POST /api/ntfy/test", h.TestNtfy)
 
 	return mux
 }
