@@ -553,6 +553,24 @@
             color: #6ee7b7;
         }
 
+        .unprocessed-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            background: rgba(148, 163, 184, 0.25);
+            color: #475569;
+        }
+
+        [data-theme="dark"] .unprocessed-tag {
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5e1;
+        }
+
         .file-list-empty {
             padding: 60px 20px;
             text-align: center;
@@ -1576,6 +1594,62 @@
             min-width: 100px;
         }
 
+        #video-info-modal .modal {
+            max-width: 720px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-info-body {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow: auto;
+            flex: 1;
+        }
+
+        .video-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px 20px;
+            font-size: 0.875rem;
+        }
+
+        .video-info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .video-info-label {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .video-info-streams {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 0.875rem;
+        }
+
+        .video-info-stream {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .video-info-stream-meta {
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+            margin-top: 4px;
+        }
+
         /* Completed Jobs Section - compact collapsible view */
         .completed-section {
             border-top: 1px solid var(--border);
@@ -2081,6 +2155,17 @@
             <div class="modal-actions">
                 <button class="btn btn-secondary" id="confirm-modal-cancel">Cancel</button>
                 <button class="btn btn-primary" id="confirm-modal-action">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Info Modal -->
+    <div id="video-info-modal" class="modal-overlay" onclick="closeVideoInfoModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-title" id="video-info-title">Video info</div>
+            <div class="video-info-body" id="video-info-body"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="video-info-close">Close</button>
             </div>
         </div>
     </div>
@@ -2830,6 +2915,18 @@
             return `${s}s`;
         }
 
+        function formatBitrate(bps) {
+            if (!bps || bps <= 0) return '—';
+            const units = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+            let value = bps;
+            let unitIndex = 0;
+            while (value >= 1000 && unitIndex < units.length - 1) {
+                value /= 1000;
+                unitIndex += 1;
+            }
+            return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+        }
+
         function getStartedAtMs(job) {
             if (!job || !job.started_at) return null;
             const started = new Date(job.started_at);
@@ -3069,7 +3166,20 @@
                 const count = entry.file_count || 0;
                 const processed = entry.processed_count || 0;
                 const isFullyProcessed = entry.is_dir ? count > 0 && processed === count : entry.processed;
-                const processedTag = isFullyProcessed ? '<span class="processed-tag">Processed</span>' : '';
+                const statusTag = isVideo
+                    ? `<span class="${isFullyProcessed ? 'processed-tag' : 'unprocessed-tag'}">${isFullyProcessed ? 'Processed' : 'Unprocessed'}</span>`
+                    : isFullyProcessed
+                        ? '<span class="processed-tag">Processed</span>'
+                        : '';
+                const videoInfoButton = isVideo
+                    ? `<button class="btn btn-secondary btn-sm file-action-btn" data-path="${escapeHtml(entry.path)}" onclick="handleVideoInfoClick(event, this)" title="Video info" aria-label="Video info">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                    </button>`
+                    : '';
                 const canMarkProcessed = isSelectable && !isFullyProcessed;
                 const markProcessedButton = canMarkProcessed
                     ? `<button class="btn btn-secondary btn-sm file-action-btn" data-path="${escapeHtml(entry.path)}" onclick="handleMarkProcessedClick(event, this)">Mark Processed</button>`
@@ -3084,7 +3194,8 @@
                         <div class="file-meta">${metaHtml}</div>
                     </div>
                     <div class="file-trailing">
-                        ${processedTag}
+                        ${statusTag}
+                        ${videoInfoButton}
                         ${markProcessedButton}
                         <div class="file-size">${formatBytes(getEntrySize(entry))}</div>
                     </div>
@@ -3345,6 +3456,94 @@
             }
         }
 
+        function handleVideoInfoClick(event, button) {
+            event.stopPropagation();
+            const path = button.dataset.path;
+            if (!path) return;
+            const entry = (fileListEntries || []).find(item => item.path === path);
+            if (!entry || !entry.video_info) return;
+            openVideoInfoModal(entry);
+        }
+
+        function openVideoInfoModal(entry) {
+            const vi = entry.video_info || {};
+            const durationSeconds = vi.duration ? vi.duration / 1e9 : null;
+            const streams = Array.isArray(vi.streams) ? vi.streams : [];
+            const subtitleText = (vi.subtitle_codecs || []).length > 0 ? vi.subtitle_codecs.join(', ') : '—';
+            const infoHtml = `
+                <div class="video-info-grid">
+                    <div class="video-info-item">
+                        <div class="video-info-label">Path</div>
+                        <div>${escapeHtml(entry.path)}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Format</div>
+                        <div>${escapeHtml(vi.format || '—')}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Duration</div>
+                        <div>${durationSeconds ? formatDuration(durationSeconds) : '—'}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Size</div>
+                        <div>${vi.size ? formatBytes(vi.size) : '—'}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Bitrate</div>
+                        <div>${formatBitrate(vi.bitrate)}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Video Codec</div>
+                        <div>${escapeHtml(vi.video_codec || '—')}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Audio Codec</div>
+                        <div>${escapeHtml(vi.audio_codec || '—')}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Subtitles</div>
+                        <div>${escapeHtml(subtitleText)}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Resolution</div>
+                        <div>${vi.width && vi.height ? `${vi.width}x${vi.height}` : '—'}</div>
+                    </div>
+                    <div class="video-info-item">
+                        <div class="video-info-label">Frame Rate</div>
+                        <div>${vi.frame_rate ? `${vi.frame_rate.toFixed(2)} fps` : '—'}</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="video-info-label">Streams</div>
+                    <div class="video-info-streams">
+                        ${streams.length > 0 ? streams.map((stream, index) => {
+                            const typeLabel = stream.type ? stream.type.toUpperCase() : 'STREAM';
+                            const resolution = stream.width && stream.height ? `${stream.width}x${stream.height}` : '';
+                            const frameRate = stream.frame_rate ? `${stream.frame_rate.toFixed(2)} fps` : '';
+                            const metaParts = [resolution, frameRate].filter(Boolean);
+                            return `
+                                <div class="video-info-stream">
+                                    <strong>${escapeHtml(`${typeLabel} ${index + 1}`)}</strong>
+                                    <div>${escapeHtml(stream.codec || 'Unknown codec')}</div>
+                                    ${metaParts.length > 0 ? `<div class="video-info-stream-meta">${escapeHtml(metaParts.join(' • '))}</div>` : ''}
+                                </div>
+                            `;
+                        }).join('') : '<div class="video-info-stream">No stream details available.</div>'}
+                    </div>
+                </div>
+            `;
+            document.getElementById('video-info-title').textContent = entry.name || 'Video info';
+            document.getElementById('video-info-body').innerHTML = infoHtml;
+            document.getElementById('video-info-modal').classList.add('active');
+        }
+
+        function closeVideoInfoModal(event) {
+            if (event && event.currentTarget && event.currentTarget.id === 'video-info-modal' && event.target !== event.currentTarget) {
+                return;
+            }
+            document.getElementById('video-info-modal').classList.remove('active');
+        }
+
         function handleMarkProcessedClick(event, button) {
             event.stopPropagation();
             const path = button.dataset.path;
@@ -3550,6 +3749,8 @@
             }
             closeConfirmModal();
         });
+
+        document.getElementById('video-info-close').addEventListener('click', closeVideoInfoModal);
 
         // Performance: Debounced refresh - batches multiple rapid updates
         function debouncedRefreshJobs() {
