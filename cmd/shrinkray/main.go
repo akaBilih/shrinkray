@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	shrinkray "github.com/gwlsn/shrinkray"
 	"github.com/gwlsn/shrinkray/internal/api"
 	"github.com/gwlsn/shrinkray/internal/auth"
+	"github.com/gwlsn/shrinkray/internal/auth/oidc"
 	"github.com/gwlsn/shrinkray/internal/auth/password"
 	"github.com/gwlsn/shrinkray/internal/browse"
 	"github.com/gwlsn/shrinkray/internal/config"
@@ -144,6 +146,23 @@ func main() {
 				log.Fatalf("Failed to initialize password auth: %v", err)
 			}
 			authRegistry.Register("password", passwordProvider)
+		}
+		if providerName == "oidc" {
+			oidcProvider, err := oidc.NewProvider(
+				context.Background(),
+				cfg.Auth.OIDC.Issuer,
+				cfg.Auth.OIDC.ClientID,
+				cfg.Auth.OIDC.ClientSecret,
+				cfg.Auth.OIDC.RedirectURL,
+				cfg.Auth.OIDC.Scopes,
+				cfg.Auth.OIDC.GroupClaim,
+				cfg.Auth.OIDC.AllowedGroups,
+				cfg.Auth.Secret,
+			)
+			if err != nil {
+				log.Fatalf("Failed to initialize oidc auth: %v", err)
+			}
+			authRegistry.Register("oidc", oidcProvider)
 		}
 
 		authProvider, ok := authRegistry.Provider(providerName)
