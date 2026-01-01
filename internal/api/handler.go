@@ -131,6 +131,7 @@ type CreateJobsRequest struct {
 	PresetID          string   `json:"preset_id"`
 	IncludeSubfolders *bool    `json:"include_subfolders,omitempty"` // Default: true (for backwards compatibility)
 	MaxDepth          *int     `json:"max_depth,omitempty"`          // nil = unlimited, 0 = current dir only, 1 = one level, etc.
+	ExcludeProcessed  *bool    `json:"exclude_processed,omitempty"`
 }
 
 // MarkProcessedRequest is the request body for marking processed paths.
@@ -188,6 +189,12 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] CreateJobs background: deferred_probing=%v, recursive=%v, paths=%v",
 			h.cfg.Features.DeferredProbing, opts.Recursive, req.Paths)
 
+		excludeProcessed := req.ExcludeProcessed != nil && *req.ExcludeProcessed
+		var processedPaths map[string]struct{}
+		if excludeProcessed {
+			processedPaths = h.queue.ProcessedPaths()
+		}
+
 		// Check if deferred probing is enabled
 		if h.cfg.Features.DeferredProbing {
 			// Streaming discovery: add jobs immediately without probing
@@ -196,6 +203,17 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Printf("[api] Error discovering video files: %v", err)
 				return
+			}
+
+			if excludeProcessed && len(processedPaths) > 0 {
+				filtered := make([]browse.FileInfo, 0, len(files))
+				for _, file := range files {
+					if _, ok := processedPaths[file.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, file)
+				}
+				files = filtered
 			}
 
 			if len(files) == 0 {
@@ -222,6 +240,17 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				fmt.Printf("Error getting video files: %v\n", err)
 				return
+			}
+
+			if excludeProcessed && len(processedPaths) > 0 {
+				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
+				for _, probe := range probes {
+					if _, ok := processedPaths[probe.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, probe)
+				}
+				probes = filtered
 			}
 
 			if len(probes) == 0 {
