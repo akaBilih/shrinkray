@@ -41,16 +41,18 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool, authMiddleware *au
 	mux.Handle("GET /api/presets", wrap(http.HandlerFunc(h.Presets)))
 	mux.Handle("GET /api/encoders", wrap(http.HandlerFunc(h.Encoders)))
 
-	mux.Handle("GET /api/jobs", wrap(http.HandlerFunc(h.ListJobs)))
-	mux.Handle("POST /api/jobs", wrap(http.HandlerFunc(h.CreateJobs)))
-	mux.Handle("GET /api/jobs/stream", wrap(http.HandlerFunc(h.JobStream)))
-	mux.Handle("POST /api/jobs/clear", wrap(http.HandlerFunc(h.ClearQueue)))
-	mux.Handle("GET /api/jobs/{id}", wrap(http.HandlerFunc(h.GetJob)))
-	mux.Handle("DELETE /api/jobs/{id}", wrap(http.HandlerFunc(h.CancelJob)))
-	mux.Handle("POST /api/jobs/{id}/retry", wrap(http.HandlerFunc(h.RetryJob)))
-	mux.Handle("POST /api/processed/clear", wrap(http.HandlerFunc(h.ClearProcessedHistory)))
-	mux.Handle("POST /api/processed/mark", wrap(http.HandlerFunc(h.MarkProcessed)))
-
+  mux.Handle("GET /api/jobs", wrap(http.HandlerFunc(h.ListJobs)))
+  mux.Handle("POST /api/jobs", wrap(http.HandlerFunc(h.CreateJobs)))
+  mux.Handle("GET /api/jobs/stream", wrap(http.HandlerFunc(h.JobStream)))
+  mux.Handle("POST /api/jobs/clear", wrap(http.HandlerFunc(h.ClearQueue)))
+  mux.Handle("GET /api/jobs/{id}", wrap(http.HandlerFunc(h.GetJob)))
+  mux.Handle("DELETE /api/jobs/{id}", wrap(http.HandlerFunc(h.CancelJob)))
+  mux.Handle("POST /api/jobs/{id}/retry", wrap(http.HandlerFunc(h.RetryJob)))
+  mux.Handle("POST /api/jobs/{id}/reorder", wrap(http.HandlerFunc(h.ReorderJob)))
+  mux.Handle("POST /api/jobs/{id}/move", wrap(http.HandlerFunc(h.MoveJob)))
+  mux.Handle("POST /api/processed/clear", wrap(http.HandlerFunc(h.ClearProcessedHistory)))
+  mux.Handle("POST /api/processed/mark", wrap(http.HandlerFunc(h.MarkProcessed)))
+  
 	mux.Handle("GET /api/config", wrap(http.HandlerFunc(h.GetConfig)))
 	mux.Handle("PUT /api/config", wrap(http.HandlerFunc(h.UpdateConfig)))
 
@@ -58,6 +60,7 @@ func NewRouter(h *Handler, staticFS embed.FS, debugMode bool, authMiddleware *au
 	mux.Handle("POST /api/cache/clear", wrap(http.HandlerFunc(h.ClearCache)))
 	mux.Handle("POST /api/pushover/test", wrap(http.HandlerFunc(h.TestPushover)))
 	mux.Handle("POST /api/ntfy/test", wrap(http.HandlerFunc(h.TestNtfy)))
+
 
 	// Determine which UI to serve
 	uiPath := "web/templates"
@@ -155,6 +158,8 @@ func NewRouterWithoutStatic(h *Handler, authMiddleware *auth.Middleware) *http.S
 	mux.Handle("GET /api/jobs/{id}", wrap(http.HandlerFunc(h.GetJob)))
 	mux.Handle("DELETE /api/jobs/{id}", wrap(http.HandlerFunc(h.CancelJob)))
 	mux.Handle("POST /api/jobs/{id}/retry", wrap(http.HandlerFunc(h.RetryJob)))
+	mux.Handle("POST /api/jobs/{id}/reorder", wrap(http.HandlerFunc(h.ReorderJob)))
+  mux.Handle("POST /api/jobs/{id}/move", wrap(http.HandlerFunc(h.MoveJob)))
 	mux.Handle("POST /api/processed/clear", wrap(http.HandlerFunc(h.ClearProcessedHistory)))
 	mux.Handle("POST /api/processed/mark", wrap(http.HandlerFunc(h.MarkProcessed)))
 
