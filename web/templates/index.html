@@ -3305,6 +3305,7 @@
                 const hasProcessed = processedPaths.size > 0 || partiallyProcessedDirs.length > 0;
                 const hasUnprocessed = selectedPathList.some(path => !processedPaths.has(path)) || partiallyProcessedDirs.length > 0;
                 let selectedJobPaths = selectedPathList;
+                let excludeProcessed = false;
 
                 if (hasProcessed && hasUnprocessed) {
                     const includeProcessed = await confirmModalChoice(
@@ -3314,6 +3315,7 @@
                     );
                     if (!includeProcessed) {
                         selectedJobPaths = selectedPathList.filter(path => !processedPaths.has(path));
+                        excludeProcessed = true;
                     }
                 }
 
@@ -3323,7 +3325,8 @@
                     body: JSON.stringify({
                         paths: selectedJobPaths,
                         preset_id: preset,
-                        include_subfolders: includeSubfolders
+                        include_subfolders: includeSubfolders,
+                        exclude_processed: excludeProcessed
                     })
                 });
                 const data = await resp.json();
