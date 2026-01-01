@@ -25,6 +25,16 @@ type ProbeResult struct {
 	FrameRate      float64       `json:"frame_rate"`
 	IsHEVC         bool          `json:"is_hevc"` // true if already x265/HEVC
 	IsAV1          bool          `json:"is_av1"`  // true if already AV1
+	Streams        []ProbeStream `json:"streams,omitempty"`
+}
+
+// ProbeStream contains metadata about a media stream.
+type ProbeStream struct {
+	Type      string  `json:"type"`
+	Codec     string  `json:"codec"`
+	Width     int     `json:"width,omitempty"`
+	Height    int     `json:"height,omitempty"`
+	FrameRate float64 `json:"frame_rate,omitempty"`
 }
 
 // ffprobeOutput represents the JSON output from ffprobe
@@ -102,6 +112,25 @@ func (p *Prober) Probe(ctx context.Context, path string) (*ProbeResult, error) {
 
 	// Parse stream-level metadata
 	for _, stream := range probeOutput.Streams {
+		probeStream := ProbeStream{
+			Type:  stream.CodecType,
+			Codec: stream.CodecName,
+		}
+		if stream.Width > 0 {
+			probeStream.Width = stream.Width
+		}
+		if stream.Height > 0 {
+			probeStream.Height = stream.Height
+		}
+		if stream.CodecType == "video" {
+			frameRate := parseFrameRate(stream.RFrameRate)
+			if frameRate == 0 {
+				frameRate = parseFrameRate(stream.AvgFrameRate)
+			}
+			probeStream.FrameRate = frameRate
+		}
+		result.Streams = append(result.Streams, probeStream)
+
 		switch stream.CodecType {
 		case "video":
 			if result.VideoCodec == "" { // Take first video stream
@@ -110,10 +139,7 @@ func (p *Prober) Probe(ctx context.Context, path string) (*ProbeResult, error) {
 				result.Height = stream.Height
 				result.IsHEVC = isHEVCCodec(stream.CodecName)
 				result.IsAV1 = isAV1Codec(stream.CodecName)
-				result.FrameRate = parseFrameRate(stream.RFrameRate)
-				if result.FrameRate == 0 {
-					result.FrameRate = parseFrameRate(stream.AvgFrameRate)
-				}
+				result.FrameRate = probeStream.FrameRate
 			}
 		case "audio":
 			if result.AudioCodec == "" { // Take first audio stream
