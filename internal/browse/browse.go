@@ -62,7 +62,7 @@ func NewBrowser(prober *ffmpeg.Prober, mediaRoot string) *Browser {
 	}
 }
 
-// SetHideProcessingTmp controls whether .trickplay.tmp files are hidden from browse results.
+// SetHideProcessingTmp controls whether shrinkray.tmp files are hidden from browse results.
 func (b *Browser) SetHideProcessingTmp(enabled bool) {
 	b.hideProcessingTmp.Store(enabled)
 }
@@ -488,7 +488,8 @@ func (b *Browser) discoverMediaFiles(root string, recursive bool, maxDepth *int)
 }
 
 func isTrickplayTmp(name string) bool {
-	return strings.HasSuffix(strings.ToLower(name), ".trickplay.tmp")
+	lowerName := strings.ToLower(name)
+	return strings.HasSuffix(lowerName, "shrinkray.tmp") || strings.Contains(lowerName, ".shrinkray.tmp.")
 }
 
 // DiscoverMediaFiles is a public wrapper for discovering media files with recursion control.

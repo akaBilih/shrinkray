@@ -99,7 +99,12 @@ func countProcessedInDir(dirPath string, processedPaths map[string]struct{}, hid
 	count := 0
 	for path := range processedPaths {
 		if strings.HasPrefix(path, prefix) {
-			if hideProcessingTmp && strings.HasSuffix(strings.ToLower(path), ".trickplay.tmp") {
+			if hideProcessingTmp {
+				lowerPath := strings.ToLower(path)
+				if strings.HasSuffix(lowerPath, "shrinkray.tmp") || strings.Contains(lowerPath, ".shrinkray.tmp.") {
+					continue
+				}
+			}
 				continue
 			}
 			count++
