@@ -35,6 +35,7 @@ type Handler struct {
 
 // NewHandler creates a new API handler
 func NewHandler(browser *browse.Browser, queue *jobs.Queue, workerPool *jobs.WorkerPool, cfg *config.Config, cfgPath string) *Handler {
+	browser.SetHideProcessingTmp(cfg.HideProcessingTmp)
 	return &Handler{
 		browser:    browser,
 		queue:      queue,
@@ -78,7 +79,7 @@ func (h *Handler) Browse(w http.ResponseWriter, r *http.Request) {
 	if len(processedPaths) > 0 {
 		for _, entry := range result.Entries {
 			if entry.IsDir {
-				entry.ProcessedCount = countProcessedInDir(entry.Path, processedPaths)
+				entry.ProcessedCount = countProcessedInDir(entry.Path, processedPaths, h.cfg.HideProcessingTmp)
 				continue
 			}
 			if _, ok := processedPaths[entry.Path]; ok {
@@ -90,7 +91,7 @@ func (h *Handler) Browse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func countProcessedInDir(dirPath string, processedPaths map[string]struct{}) int {
+func countProcessedInDir(dirPath string, processedPaths map[string]struct{}, hideProcessingTmp bool) int {
 	if len(processedPaths) == 0 {
 		return 0
 	}
@@ -98,6 +99,9 @@ func countProcessedInDir(dirPath string, processedPaths map[string]struct{}) int
 	count := 0
 	for path := range processedPaths {
 		if strings.HasPrefix(path, prefix) {
+			if hideProcessingTmp && strings.HasSuffix(strings.ToLower(path), ".trickplay.tmp") {
+				continue
+			}
 			count++
 		}
 	}
@@ -468,6 +472,7 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"ntfy_token":          h.cfg.NtfyToken,
 		"ntfy_configured":     h.ntfy.IsConfigured(),
 		"notify_on_complete":  h.cfg.NotifyOnComplete,
+		"hide_processing_tmp": h.cfg.HideProcessingTmp,
 		// Feature flags for frontend
 		"features": map[string]bool{
 			"virtual_scroll":   h.cfg.Features.VirtualScroll,
@@ -481,14 +486,15 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateConfigRequest is the request body for updating config
 type UpdateConfigRequest struct {
-	OriginalHandling *string `json:"original_handling,omitempty"`
-	Workers          *int    `json:"workers,omitempty"`
-	PushoverUserKey  *string `json:"pushover_user_key,omitempty"`
-	PushoverAppToken *string `json:"pushover_app_token,omitempty"`
-	NtfyServer       *string `json:"ntfy_server,omitempty"`
-	NtfyTopic        *string `json:"ntfy_topic,omitempty"`
-	NtfyToken        *string `json:"ntfy_token,omitempty"`
-	NotifyOnComplete *bool   `json:"notify_on_complete,omitempty"`
+	OriginalHandling  *string `json:"original_handling,omitempty"`
+	Workers           *int    `json:"workers,omitempty"`
+	PushoverUserKey   *string `json:"pushover_user_key,omitempty"`
+	PushoverAppToken  *string `json:"pushover_app_token,omitempty"`
+	NtfyServer        *string `json:"ntfy_server,omitempty"`
+	NtfyTopic         *string `json:"ntfy_topic,omitempty"`
+	NtfyToken         *string `json:"ntfy_token,omitempty"`
+	NotifyOnComplete  *bool   `json:"notify_on_complete,omitempty"`
+	HideProcessingTmp *bool   `json:"hide_processing_tmp,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -540,6 +546,10 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.NotifyOnComplete != nil {
 		h.cfg.NotifyOnComplete = *req.NotifyOnComplete
+	}
+	if req.HideProcessingTmp != nil {
+		h.cfg.HideProcessingTmp = *req.HideProcessingTmp
+		h.browser.SetHideProcessingTmp(*req.HideProcessingTmp)
 	}
 
 	// Persist config to disk
