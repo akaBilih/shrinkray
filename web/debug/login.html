@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shrinkray Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #FAFAFA;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #F5F5F5;
+            --text-primary: #1A1A1A;
+            --text-secondary: #6B6B6B;
+            --text-tertiary: #9A9A9A;
+            --accent: #2563EB;
+            --accent-hover: #1D4ED8;
+            --accent-light: #EFF6FF;
+            --success: #059669;
+            --success-light: #ECFDF5;
+            --warning: #D97706;
+            --warning-light: #FFFBEB;
+            --error: #DC2626;
+            --error-light: #FEF2F2;
+            --border: #E5E5E5;
+            --border-hover: #D4D4D4;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 32px rgba(0,0,0,0.12);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --transition-fast: 150ms ease;
+            --transition-normal: 250ms ease;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #0F0F0F;
+            --bg-secondary: #1A1A1A;
+            --bg-tertiary: #252525;
+            --text-primary: #F5F5F5;
+            --text-secondary: #A0A0A0;
+            --text-tertiary: #6B6B6B;
+            --accent: #3B82F6;
+            --accent-hover: #60A5FA;
+            --accent-light: #1E3A5F;
+            --success: #10B981;
+            --success-light: #064E3B;
+            --warning: #F59E0B;
+            --warning-light: #78350F;
+            --error: #EF4444;
+            --error-light: #7F1D1D;
+            --border: #2E2E2E;
+            --border-hover: #404040;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+            --shadow-lg: 0 12px 32px rgba(0,0,0,0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .login-shell {
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .login-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brand-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .brand-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .login-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .login-copy {
+            color: var(--text-secondary);
+            font-size: 0.9375rem;
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        input[type="password"] {
+            padding: 12px 14px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            font-size: 0.9375rem;
+            color: var(--text-primary);
+            transition: border var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        input[type="password"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-light);
+        }
+
+        .submit-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background var(--transition-fast), transform var(--transition-fast);
+        }
+
+        .submit-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .submit-btn:active {
+            transform: translateY(1px);
+        }
+
+        .helper {
+            font-size: 0.8125rem;
+            color: var(--text-tertiary);
+            text-align: center;
+        }
+
+        .footer-note {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+        }
+
+        .footer-pill {
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--bg-tertiary);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-shell">
+        <div class="login-card">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/logo.png" alt="Shrinkray logo">
+                </div>
+                <div class="brand-text">
+                    <div class="brand-title">Shrinkray</div>
+                    <div class="brand-subtitle">Secure access required</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="login-title">Enter your password</div>
+                <div class="login-copy">Authenticate to manage jobs, presets, and queue operations.</div>
+            </div>
+
+            <form class="login-form" method="post" action="/auth/login">
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input id="password" name="password" type="password" placeholder="Your access key" required>
+                </div>
+                <button class="submit-btn" type="submit">Unlock Shrinkray</button>
+            </form>
+
+            <div class="helper">Need access? Contact your Shrinkray administrator.</div>
+        </div>
+
+        <div class="footer-note">
+            <span class="footer-pill">/auth/login</span>
+            <span>protected by Shrinkray auth</span>
+        </div>
+    </div>
+
+    <script>
+        const savedTheme = localStorage.getItem('shrinkray-theme');
+        document.documentElement.setAttribute('data-theme', savedTheme || 'light');
+    </script>
+</body>
+</html>
