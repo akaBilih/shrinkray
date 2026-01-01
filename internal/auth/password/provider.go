@@ -95,7 +95,199 @@ func (p *Provider) HandleLogin(w http.ResponseWriter, r *http.Request) error {
 	case http.MethodGet:
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(`<!doctype html><html><body><form method="POST"><label>Username <input name="username"/></label><br/><label>Password <input type="password" name="password"/></label><br/><button type="submit">Login</button></form></body></html>`))
+		_, err := w.Write([]byte(`<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shrinkray Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #FAFAFA;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #F5F5F5;
+            --text-primary: #1A1A1A;
+            --text-secondary: #6B6B6B;
+            --text-tertiary: #9A9A9A;
+            --accent: #2563EB;
+            --accent-hover: #1D4ED8;
+            --accent-light: #EFF6FF;
+            --border: #E5E5E5;
+            --border-hover: #D4D4D4;
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --transition-fast: 150ms ease;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #0F0F0F;
+            --bg-secondary: #1A1A1A;
+            --bg-tertiary: #252525;
+            --text-primary: #F5F5F5;
+            --text-secondary: #A0A0A0;
+            --text-tertiary: #6B6B6B;
+            --accent: #3B82F6;
+            --accent-hover: #60A5FA;
+            --accent-light: #1E3A5F;
+            --border: #2E2E2E;
+            --border-hover: #404040;
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .login-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: radial-gradient(circle at top, var(--accent-light), transparent 55%), var(--bg-primary);
+        }
+
+        .login-card {
+            width: min(420px, 100%);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .login-header {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+            font-size: 1.125rem;
+        }
+
+        .logo img {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+        }
+
+        .login-header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        input {
+            padding: 12px 14px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-light);
+        }
+
+        button {
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            border: none;
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background var(--transition-fast), transform var(--transition-fast);
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .login-footer {
+            font-size: 0.85rem;
+            color: var(--text-tertiary);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="logo">
+                    <img src="/logo.png" alt="Shrinkray logo">
+                    <span>Shrinkray</span>
+                </div>
+                <h1>Sign in</h1>
+                <p>Use your Shrinkray account to continue.</p>
+            </div>
+            <form method="POST" action="/auth/login">
+                <label>
+                    Username
+                    <input name="username" autocomplete="username" required>
+                </label>
+                <label>
+                    Password
+                    <input type="password" name="password" autocomplete="current-password" required>
+                </label>
+                <button type="submit">Login</button>
+            </form>
+            <div class="login-footer">Protected access for Shrinkray administrators.</div>
+        </div>
+    </div>
+</body>
+</html>`))
 		return err
 	case http.MethodPost:
 	default:
