@@ -1927,6 +1927,18 @@
                     </div>
                     <div class="setting-item">
                         <div class="setting-info">
+                            <div class="setting-name">Subtitles</div>
+                            <div class="setting-desc">Handle unsupported subtitle codecs for MKV output</div>
+                        </div>
+                        <div class="setting-control">
+                            <select class="setting-select" id="setting-subtitle-handling" onchange="updateSetting('subtitle_handling', this.value)">
+                                <option value="convert">Convert mov_text to SRT</option>
+                                <option value="drop">Drop unsupported subtitles</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
                             <div class="setting-name">Concurrent jobs</div>
                             <div class="setting-desc">Simultaneous transcode tasks</div>
                         </div>
@@ -2067,7 +2079,7 @@
                 </label>
             </div>
             <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn btn-secondary" id="confirm-modal-cancel">Cancel</button>
                 <button class="btn btn-primary" id="confirm-modal-action">Confirm</button>
             </div>
         </div>
@@ -3284,12 +3296,22 @@
                 const selectedPathList = Array.from(selectedPaths);
                 const selectedEntries = selectedPathList.map(path => entryMap.get(path)).filter(Boolean);
                 const processedPaths = new Set(selectedEntries.filter(isEntryFullyProcessed).map(entry => entry.path));
-                const hasProcessed = processedPaths.size > 0;
-                const hasUnprocessed = selectedPathList.some(path => !processedPaths.has(path));
+                const partiallyProcessedDirs = selectedEntries.filter(entry => {
+                    if (!entry || !entry.is_dir) return false;
+                    const count = entry.file_count || 0;
+                    const processed = entry.processed_count || 0;
+                    return count > 0 && processed > 0 && processed < count;
+                });
+                const hasProcessed = processedPaths.size > 0 || partiallyProcessedDirs.length > 0;
+                const hasUnprocessed = selectedPathList.some(path => !processedPaths.has(path)) || partiallyProcessedDirs.length > 0;
                 let selectedJobPaths = selectedPathList;
 
                 if (hasProcessed && hasUnprocessed) {
-                    const includeProcessed = window.confirm('Some selected items are already processed. Include them in this transcode?');
+                    const includeProcessed = await confirmModalChoice(
+                        'Include processed items?',
+                        'Some selected items include files that are already processed. Do you want to include them in this transcode?',
+                        { actionText: 'Include', cancelText: 'Exclude' }
+                    );
                     if (!includeProcessed) {
                         selectedJobPaths = selectedPathList.filter(path => !processedPaths.has(path));
                     }
@@ -3458,13 +3480,20 @@
 
         // Confirm Modal
         let confirmCallback = null;
+        let confirmCancelCallback = null;
 
         function showConfirmModal(title, message, onConfirm, options = {}) {
             document.getElementById('confirm-modal-title').textContent = title;
             document.getElementById('confirm-modal-message').textContent = message;
             confirmCallback = onConfirm;
+            confirmCancelCallback = options.onCancel || null;
             const optionsEl = document.getElementById('confirm-modal-options');
             const removeCompletedEl = document.getElementById('confirm-modal-remove-completed');
+            const cancelButton = document.getElementById('confirm-modal-cancel');
+            const actionButton = document.getElementById('confirm-modal-action');
+            actionButton.textContent = options.actionText || 'Confirm';
+            cancelButton.textContent = options.cancelText || 'Cancel';
+            cancelButton.style.display = options.showCancel === false ? 'none' : '';
             if (options.showRemoveCompletedToggle) {
                 optionsEl.style.display = 'block';
                 const stored = localStorage.getItem(storageKeys.clearRecentlyCompleted);
@@ -3480,16 +3509,41 @@
             document.getElementById('confirm-modal').classList.add('active');
         }
 
+        function confirmModalChoice(title, message, options = {}) {
+            return new Promise(resolve => {
+                showConfirmModal(
+                    title,
+                    message,
+                    () => resolve(true),
+                    {
+                        ...options,
+                        onCancel: () => resolve(false),
+                    }
+                );
+            });
+        }
+
         function closeConfirmModal(event) {
             // If called from overlay click, only close if clicking the overlay itself
             if (event && event.target !== event.currentTarget) return;
+            if (event && event.target === event.currentTarget && confirmCancelCallback) {
+                confirmCancelCallback();
+            }
             document.getElementById('confirm-modal').classList.remove('active');
             confirmCallback = null;
+            confirmCancelCallback = null;
         }
 
         document.getElementById('confirm-modal-action').addEventListener('click', () => {
             if (confirmCallback) {
                 confirmCallback();
+            }
+            closeConfirmModal();
+        });
+
+        document.getElementById('confirm-modal-cancel').addEventListener('click', () => {
+            if (confirmCancelCallback) {
+                confirmCancelCallback();
             }
             closeConfirmModal();
         });
@@ -4382,6 +4436,7 @@
                 }
 
                 document.getElementById('setting-original-handling').value = config.original_handling || 'replace';
+                document.getElementById('setting-subtitle-handling').value = config.subtitle_handling || 'convert';
                 document.getElementById('setting-workers').value = config.workers || 1;
 
                 // Pushover settings
