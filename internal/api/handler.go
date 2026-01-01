@@ -105,8 +105,6 @@ func countProcessedInDir(dirPath string, processedPaths map[string]struct{}, hid
 					continue
 				}
 			}
-				continue
-			}
 			count++
 		}
 	}
