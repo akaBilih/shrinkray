@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -16,7 +17,7 @@ type Middleware struct {
 
 // DefaultBypassPaths returns default unauthenticated endpoints.
 func DefaultBypassPaths() []string {
-	return []string{"/healthz", "/auth/callback", "/auth/login"}
+	return []string{"/healthz", "/auth/callback", "/auth/login", "/auth/logout"}
 }
 
 // NewMiddleware creates an auth middleware.
@@ -41,6 +42,12 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			ctx := context.WithValue(r.Context(), contextKey{}, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
+		}
+
+		if errors.Is(err, ErrSessionExpired) || errors.Is(err, ErrSessionInvalid) {
+			if cleaner, ok := m.Provider.(SessionCleaner); ok {
+				cleaner.ClearSession(w, r)
+			}
 		}
 
 		if isAPIRequest(r.URL.Path) {
