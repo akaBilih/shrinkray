@@ -304,12 +304,6 @@ func (p *Provider) sessionFromRequest(r *http.Request) (sessionPayload, error) {
 }
 
 func (p *Provider) ensureStateCookie(w http.ResponseWriter, r *http.Request) (string, string, error) {
-	if stateData, err := p.loadStateCookie(r); err == nil {
-		if stateData.ExpiresAt >= time.Now().Unix() {
-			return stateData.State, stateData.Nonce, nil
-		}
-	}
-
 	state, err := generateNonce()
 	if err != nil {
 		return "", "", err
@@ -334,7 +328,7 @@ func (p *Provider) ensureStateCookie(w http.ResponseWriter, r *http.Request) (st
 		Value:    encoded,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: stateCookieSameSite(r),
+		SameSite: http.SameSiteLaxMode,
 		Expires:  expires,
 		Secure:   isSecureRequest(r),
 	})
