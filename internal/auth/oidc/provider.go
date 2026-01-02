@@ -158,34 +158,10 @@ func (p *Provider) LoginURL(_ *http.Request) (string, error) {
 
 // HandleLogin initiates the authorization code flow.
 func (p *Provider) HandleLogin(w http.ResponseWriter, r *http.Request) error {
-	state, err := generateNonce()
+	state, nonce, err := p.ensureStateCookie(w, r)
 	if err != nil {
 		return err
 	}
-	nonce, err := generateNonce()
-	if err != nil {
-		return err
-	}
-	expires := time.Now().Add(defaultStateTimeout)
-	statePayload := statePayload{
-		State:     state,
-		Nonce:     nonce,
-		ExpiresAt: expires.Unix(),
-	}
-	encoded, err := p.signStatePayload(statePayload)
-	if err != nil {
-		return err
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     p.stateCookieName,
-		Value:    encoded,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  expires,
-		Secure:   isSecureRequest(r),
-	})
 
 	loginURL := p.oauth2Config.AuthCodeURL(state, oidc.Nonce(nonce))
 	http.Redirect(w, r, loginURL, http.StatusFound)
@@ -200,12 +176,7 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) error 
 		return errors.New("missing code or state")
 	}
 
-	cookie, err := r.Cookie(p.stateCookieName)
-	if err != nil {
-		return errors.New("missing auth state")
-	}
-
-	stateData, err := p.verifyStateCookie(cookie.Value)
+	stateData, err := p.loadStateCookie(r)
 	if err != nil {
 		return err
 	}
@@ -333,6 +304,60 @@ func (p *Provider) sessionFromRequest(r *http.Request) (sessionPayload, error) {
 		return sessionPayload{}, err
 	}
 	return session, nil
+}
+
+func (p *Provider) ensureStateCookie(w http.ResponseWriter, r *http.Request) (string, string, error) {
+	if stateData, err := p.loadStateCookie(r); err == nil {
+		if stateData.ExpiresAt >= time.Now().Unix() {
+			return stateData.State, stateData.Nonce, nil
+		}
+	}
+
+	state, err := generateNonce()
+	if err != nil {
+		return "", "", err
+	}
+	nonce, err := generateNonce()
+	if err != nil {
+		return "", "", err
+	}
+	expires := time.Now().Add(defaultStateTimeout)
+	statePayload := statePayload{
+		State:     state,
+		Nonce:     nonce,
+		ExpiresAt: expires.Unix(),
+	}
+	encoded, err := p.signStatePayload(statePayload)
+	if err != nil {
+		return "", "", err
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     p.stateCookieName,
+		Value:    encoded,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expires,
+		Secure:   isSecureRequest(r),
+	})
+
+	return state, nonce, nil
+}
+
+func (p *Provider) loadStateCookie(r *http.Request) (statePayload, error) {
+	cookie, err := r.Cookie(p.stateCookieName)
+	if err != nil {
+		return statePayload{}, errors.New("missing auth state")
+	}
+	stateData, err := p.verifyStateCookie(cookie.Value)
+	if err != nil {
+		return statePayload{}, err
+	}
+	if stateData.ExpiresAt < time.Now().Unix() {
+		return statePayload{}, errors.New("state expired")
+	}
+	return stateData, nil
 }
 
 type statePayload struct {
