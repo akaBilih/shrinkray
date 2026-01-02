@@ -50,11 +50,15 @@ func main() {
 	}
 
 	// Override with environment variables
+	mediaOverride := ""
 	if envMedia := os.Getenv("MEDIA_PATH"); envMedia != "" {
-		cfg.MediaPath = envMedia
+		mediaOverride = envMedia
 	}
 	if *mediaPath != "" {
-		cfg.MediaPath = *mediaPath
+		mediaOverride = *mediaPath
+	}
+	if mediaOverride != "" {
+		cfg.MediaPath = mediaOverride
 	}
 
 	// Validate media path exists
@@ -178,6 +182,13 @@ func main() {
 
 	router := api.NewRouter(handler, shrinkray.WebFS, *debugUI, authMiddleware)
 
+	// Start config watcher
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	startConfigWatcher(watchCtx, cfgPath, handler, cfg, configReloadOptions{
+		mediaOverride: mediaOverride,
+		queueFile:     cfg.QueueFile,
+	})
+
 	// Start worker pool
 	workerPool.Start()
 	defer workerPool.Stop()
@@ -205,6 +216,7 @@ func main() {
 	go func() {
 		<-sigChan
 		fmt.Println("\n  Shutting down...")
+		watchCancel()
 		workerPool.Stop()
 		server.Close()
 	}()

@@ -665,6 +665,43 @@ func (h *Handler) GetPushover() *pushover.Client {
 	return h.pushover
 }
 
+// ApplyConfig updates runtime configuration from a freshly loaded config.
+func (h *Handler) ApplyConfig(newCfg *config.Config) {
+	if newCfg.Workers != h.cfg.Workers {
+		h.workerPool.Resize(newCfg.Workers)
+	}
+
+	if newCfg.HideProcessingTmp != h.cfg.HideProcessingTmp {
+		h.browser.SetHideProcessingTmp(newCfg.HideProcessingTmp)
+	}
+
+	if newCfg.MediaPath != "" && newCfg.MediaPath != h.cfg.MediaPath {
+		h.browser.SetMediaRoot(newCfg.MediaPath)
+	}
+
+	h.cfg.MediaPath = newCfg.MediaPath
+	h.cfg.TempPath = newCfg.TempPath
+	h.cfg.OriginalHandling = newCfg.OriginalHandling
+	h.cfg.SubtitleHandling = newCfg.SubtitleHandling
+	h.cfg.Workers = newCfg.Workers
+	h.cfg.FFmpegPath = newCfg.FFmpegPath
+	h.cfg.FFprobePath = newCfg.FFprobePath
+	h.cfg.PushoverUserKey = newCfg.PushoverUserKey
+	h.cfg.PushoverAppToken = newCfg.PushoverAppToken
+	h.cfg.NtfyServer = newCfg.NtfyServer
+	h.cfg.NtfyTopic = newCfg.NtfyTopic
+	h.cfg.NtfyToken = newCfg.NtfyToken
+	h.cfg.NotifyOnComplete = newCfg.NotifyOnComplete
+	h.cfg.HideProcessingTmp = newCfg.HideProcessingTmp
+	h.cfg.Features = newCfg.Features
+
+	h.pushover.UserKey = newCfg.PushoverUserKey
+	h.pushover.AppToken = newCfg.PushoverAppToken
+	h.ntfy.ServerURL = newCfg.NtfyServer
+	h.ntfy.Topic = newCfg.NtfyTopic
+	h.ntfy.Token = newCfg.NtfyToken
+}
+
 // RetryJob handles POST /api/jobs/:id/retry
 func (h *Handler) RetryJob(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
