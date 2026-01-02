@@ -180,14 +180,11 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	if stateData.ExpiresAt < time.Now().Unix() {
-		return errors.New("state expired")
-	}
 	if subtle.ConstantTimeCompare([]byte(state), []byte(stateData.State)) != 1 {
 		return errors.New("invalid state")
 	}
 
-	clearStateCookie(w, p.stateCookieName)
+	clearStateCookie(w, r, p.stateCookieName)
 
 	token, err := p.oauth2Config.Exchange(r.Context(), code)
 	if err != nil {
@@ -547,13 +544,14 @@ func stateCookieSameSite(r *http.Request) http.SameSite {
 	return http.SameSiteLaxMode
 }
 
-func clearStateCookie(w http.ResponseWriter, name string) {
+func clearStateCookie(w http.ResponseWriter, r *http.Request, name string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: stateCookieSameSite(r),
+		Secure:   isSecureRequest(r),
 	})
 }
