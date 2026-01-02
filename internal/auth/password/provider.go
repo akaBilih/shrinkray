@@ -67,13 +67,13 @@ func (p *Provider) Authenticate(r *http.Request) (*auth.User, error) {
 
 	username, expiry, err := p.verifySession(cookie.Value)
 	if err != nil {
-		return nil, err
+		return nil, auth.ErrSessionInvalid
 	}
 	if expiry.Before(time.Now()) {
-		return nil, errors.New("session expired")
+		return nil, auth.ErrSessionExpired
 	}
 	if _, ok := p.users[username]; !ok {
-		return nil, errors.New("unknown user")
+		return nil, auth.ErrSessionInvalid
 	}
 
 	return &auth.User{ID: username, Name: username}, nil
@@ -321,6 +321,26 @@ func (p *Provider) HandleLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// HandleLogout clears the session cookie and redirects to login.
+func (p *Provider) HandleLogout(w http.ResponseWriter, r *http.Request) error {
+	p.ClearSession(w, r)
+	http.Redirect(w, r, "/auth/login", http.StatusFound)
+	return nil
+}
+
+// ClearSession removes the session cookie.
+func (p *Provider) ClearSession(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     p.cookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
+	})
 }
 
 func (p *Provider) verifyPassword(username, password string) (bool, error) {

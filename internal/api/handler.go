@@ -573,6 +573,8 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"ntfy_configured":     h.ntfy.IsConfigured(),
 		"notify_on_complete":  h.cfg.NotifyOnComplete,
 		"hide_processing_tmp": h.cfg.HideProcessingTmp,
+		"auth_enabled":        h.cfg.Auth.Enabled,
+		"auth_provider":       h.cfg.Auth.Provider,
 		// Feature flags for frontend
 		"features": map[string]bool{
 			"virtual_scroll":   h.cfg.Features.VirtualScroll,
