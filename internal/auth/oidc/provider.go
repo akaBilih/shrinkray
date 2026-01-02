@@ -180,9 +180,6 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	if stateData.ExpiresAt < time.Now().Unix() {
-		return errors.New("state expired")
-	}
 	if subtle.ConstantTimeCompare([]byte(state), []byte(stateData.State)) != 1 {
 		return errors.New("invalid state")
 	}
@@ -307,12 +304,6 @@ func (p *Provider) sessionFromRequest(r *http.Request) (sessionPayload, error) {
 }
 
 func (p *Provider) ensureStateCookie(w http.ResponseWriter, r *http.Request) (string, string, error) {
-	if stateData, err := p.loadStateCookie(r); err == nil {
-		if stateData.ExpiresAt >= time.Now().Unix() {
-			return stateData.State, stateData.Nonce, nil
-		}
-	}
-
 	state, err := generateNonce()
 	if err != nil {
 		return "", "", err
@@ -337,7 +328,7 @@ func (p *Provider) ensureStateCookie(w http.ResponseWriter, r *http.Request) (st
 		Value:    encoded,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: stateCookieSameSite(r),
+		SameSite: http.SameSiteLaxMode,
 		Expires:  expires,
 		Secure:   isSecureRequest(r),
 	})
@@ -538,13 +529,6 @@ func isSecureRequest(r *http.Request) bool {
 		}
 	}
 	return r.TLS != nil
-}
-
-func stateCookieSameSite(r *http.Request) http.SameSite {
-	if isSecureRequest(r) {
-		return http.SameSiteNoneMode
-	}
-	return http.SameSiteLaxMode
 }
 
 func clearStateCookie(w http.ResponseWriter, name string) {
