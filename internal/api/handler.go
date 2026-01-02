@@ -229,6 +229,7 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 		if excludeProcessed {
 			processedPaths = h.queue.ProcessedPaths()
 		}
+		queuedPaths := h.queue.EnqueuedPaths()
 
 		// Check if deferred probing is enabled
 		if h.cfg.Features.DeferredProbing {
@@ -244,6 +245,16 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 				filtered := make([]browse.DiscoveredFile, 0, len(files))
 				for _, file := range files {
 					if _, ok := processedPaths[file.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, file)
+				}
+				files = filtered
+			}
+			if len(queuedPaths) > 0 {
+				filtered := make([]browse.DiscoveredFile, 0, len(files))
+				for _, file := range files {
+					if _, ok := queuedPaths[file.Path]; ok {
 						continue
 					}
 					filtered = append(filtered, file)
@@ -281,6 +292,16 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
 				for _, probe := range probes {
 					if _, ok := processedPaths[probe.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, probe)
+				}
+				probes = filtered
+			}
+			if len(queuedPaths) > 0 {
+				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
+				for _, probe := range probes {
+					if _, ok := queuedPaths[probe.Path]; ok {
 						continue
 					}
 					filtered = append(filtered, probe)
