@@ -88,6 +88,19 @@ func (h *Handler) Browse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	pendingPaths := h.queue.PendingPaths()
+	if len(pendingPaths) > 0 {
+		for _, entry := range result.Entries {
+			if entry.IsDir {
+				entry.Pending = hasPendingInDir(entry.Path, pendingPaths, h.cfg.HideProcessingTmp)
+				continue
+			}
+			if _, ok := pendingPaths[entry.Path]; ok {
+				entry.Pending = true
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -109,6 +122,25 @@ func countProcessedInDir(dirPath string, processedPaths map[string]struct{}, hid
 		}
 	}
 	return count
+}
+
+func hasPendingInDir(dirPath string, pendingPaths map[string]struct{}, hideProcessingTmp bool) bool {
+	if len(pendingPaths) == 0 {
+		return false
+	}
+	prefix := dirPath + string(os.PathSeparator)
+	for path := range pendingPaths {
+		if strings.HasPrefix(path, prefix) {
+			if hideProcessingTmp {
+				lowerPath := strings.ToLower(path)
+				if strings.HasSuffix(lowerPath, "shrinkray.tmp") || strings.Contains(lowerPath, ".shrinkray.tmp.") {
+					continue
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // Presets handles GET /api/presets
@@ -197,6 +229,7 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 		if excludeProcessed {
 			processedPaths = h.queue.ProcessedPaths()
 		}
+		queuedPaths := h.queue.EnqueuedPaths()
 
 		// Check if deferred probing is enabled
 		if h.cfg.Features.DeferredProbing {
@@ -212,6 +245,16 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 				filtered := make([]browse.DiscoveredFile, 0, len(files))
 				for _, file := range files {
 					if _, ok := processedPaths[file.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, file)
+				}
+				files = filtered
+			}
+			if len(queuedPaths) > 0 {
+				filtered := make([]browse.DiscoveredFile, 0, len(files))
+				for _, file := range files {
+					if _, ok := queuedPaths[file.Path]; ok {
 						continue
 					}
 					filtered = append(filtered, file)
@@ -249,6 +292,16 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
 				for _, probe := range probes {
 					if _, ok := processedPaths[probe.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, probe)
+				}
+				probes = filtered
+			}
+			if len(queuedPaths) > 0 {
+				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
+				for _, probe := range probes {
+					if _, ok := queuedPaths[probe.Path]; ok {
 						continue
 					}
 					filtered = append(filtered, probe)
