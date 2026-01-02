@@ -88,6 +88,19 @@ func (h *Handler) Browse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	pendingPaths := h.queue.PendingPaths()
+	if len(pendingPaths) > 0 {
+		for _, entry := range result.Entries {
+			if entry.IsDir {
+				entry.Pending = hasPendingInDir(entry.Path, pendingPaths, h.cfg.HideProcessingTmp)
+				continue
+			}
+			if _, ok := pendingPaths[entry.Path]; ok {
+				entry.Pending = true
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -109,6 +122,25 @@ func countProcessedInDir(dirPath string, processedPaths map[string]struct{}, hid
 		}
 	}
 	return count
+}
+
+func hasPendingInDir(dirPath string, pendingPaths map[string]struct{}, hideProcessingTmp bool) bool {
+	if len(pendingPaths) == 0 {
+		return false
+	}
+	prefix := dirPath + string(os.PathSeparator)
+	for path := range pendingPaths {
+		if strings.HasPrefix(path, prefix) {
+			if hideProcessingTmp {
+				lowerPath := strings.ToLower(path)
+				if strings.HasSuffix(lowerPath, "shrinkray.tmp") || strings.Contains(lowerPath, ".shrinkray.tmp.") {
+					continue
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // Presets handles GET /api/presets
@@ -197,6 +229,7 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 		if excludeProcessed {
 			processedPaths = h.queue.ProcessedPaths()
 		}
+		queuedPaths := h.queue.EnqueuedPaths()
 
 		// Check if deferred probing is enabled
 		if h.cfg.Features.DeferredProbing {
@@ -212,6 +245,16 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 				filtered := make([]browse.DiscoveredFile, 0, len(files))
 				for _, file := range files {
 					if _, ok := processedPaths[file.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, file)
+				}
+				files = filtered
+			}
+			if len(queuedPaths) > 0 {
+				filtered := make([]browse.DiscoveredFile, 0, len(files))
+				for _, file := range files {
+					if _, ok := queuedPaths[file.Path]; ok {
 						continue
 					}
 					filtered = append(filtered, file)
@@ -249,6 +292,16 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
 				for _, probe := range probes {
 					if _, ok := processedPaths[probe.Path]; ok {
+						continue
+					}
+					filtered = append(filtered, probe)
+				}
+				probes = filtered
+			}
+			if len(queuedPaths) > 0 {
+				filtered := make([]*ffmpeg.ProbeResult, 0, len(probes))
+				for _, probe := range probes {
+					if _, ok := queuedPaths[probe.Path]; ok {
 						continue
 					}
 					filtered = append(filtered, probe)
@@ -520,6 +573,8 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"ntfy_configured":     h.ntfy.IsConfigured(),
 		"notify_on_complete":  h.cfg.NotifyOnComplete,
 		"hide_processing_tmp": h.cfg.HideProcessingTmp,
+		"auth_enabled":        h.cfg.Auth.Enabled,
+		"auth_provider":       h.cfg.Auth.Provider,
 		// Feature flags for frontend
 		"features": map[string]bool{
 			"virtual_scroll":   h.cfg.Features.VirtualScroll,
@@ -663,6 +718,43 @@ func (h *Handler) TestNtfy(w http.ResponseWriter, r *http.Request) {
 // GetPushover returns the Pushover client (for SSE handler)
 func (h *Handler) GetPushover() *pushover.Client {
 	return h.pushover
+}
+
+// ApplyConfig updates runtime configuration from a freshly loaded config.
+func (h *Handler) ApplyConfig(newCfg *config.Config) {
+	if newCfg.Workers != h.cfg.Workers {
+		h.workerPool.Resize(newCfg.Workers)
+	}
+
+	if newCfg.HideProcessingTmp != h.cfg.HideProcessingTmp {
+		h.browser.SetHideProcessingTmp(newCfg.HideProcessingTmp)
+	}
+
+	if newCfg.MediaPath != "" && newCfg.MediaPath != h.cfg.MediaPath {
+		h.browser.SetMediaRoot(newCfg.MediaPath)
+	}
+
+	h.cfg.MediaPath = newCfg.MediaPath
+	h.cfg.TempPath = newCfg.TempPath
+	h.cfg.OriginalHandling = newCfg.OriginalHandling
+	h.cfg.SubtitleHandling = newCfg.SubtitleHandling
+	h.cfg.Workers = newCfg.Workers
+	h.cfg.FFmpegPath = newCfg.FFmpegPath
+	h.cfg.FFprobePath = newCfg.FFprobePath
+	h.cfg.PushoverUserKey = newCfg.PushoverUserKey
+	h.cfg.PushoverAppToken = newCfg.PushoverAppToken
+	h.cfg.NtfyServer = newCfg.NtfyServer
+	h.cfg.NtfyTopic = newCfg.NtfyTopic
+	h.cfg.NtfyToken = newCfg.NtfyToken
+	h.cfg.NotifyOnComplete = newCfg.NotifyOnComplete
+	h.cfg.HideProcessingTmp = newCfg.HideProcessingTmp
+	h.cfg.Features = newCfg.Features
+
+	h.pushover.UserKey = newCfg.PushoverUserKey
+	h.pushover.AppToken = newCfg.PushoverAppToken
+	h.ntfy.ServerURL = newCfg.NtfyServer
+	h.ntfy.Topic = newCfg.NtfyTopic
+	h.ntfy.Token = newCfg.NtfyToken
 }
 
 // RetryJob handles POST /api/jobs/:id/retry

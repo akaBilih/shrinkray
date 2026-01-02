@@ -33,3 +33,17 @@ func LoginHandler(provider Provider) http.HandlerFunc {
 		}
 	}
 }
+
+// LogoutHandler handles auth logout requests.
+func LogoutHandler(provider Provider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logoutProvider, ok := provider.(LogoutHandlerProvider)
+		if !ok || provider == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if err := logoutProvider.HandleLogout(w, r); err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		}
+	}
+}

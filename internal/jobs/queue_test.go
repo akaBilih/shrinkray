@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -103,12 +104,21 @@ func TestQueueLifecycle(t *testing.T) {
 func TestQueuePersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	queueFile := filepath.Join(tmpDir, "queue.json")
+	inputPath := filepath.Join(tmpDir, "video.mkv")
+	outputPath := filepath.Join(tmpDir, "video.mkv.processed")
+
+	if err := os.WriteFile(inputPath, []byte("input"), 0644); err != nil {
+		t.Fatalf("failed to create input file: %v", err)
+	}
+	if err := os.WriteFile(outputPath, []byte("output"), 0644); err != nil {
+		t.Fatalf("failed to create output file: %v", err)
+	}
 
 	// Create queue and add jobs
 	queue1, _ := NewQueue(queueFile)
 
 	probe := &ffmpeg.ProbeResult{
-		Path:     "/media/video.mkv",
+		Path:     inputPath,
 		Size:     1000000,
 		Duration: 10 * time.Second,
 	}
@@ -126,7 +136,7 @@ func TestQueuePersistence(t *testing.T) {
 
 	// Complete one job
 	queue1.StartJob(job1.ID, "/tmp/temp.mkv")
-	queue1.CompleteJob(job1.ID, "/media/video.mkv", 500000)
+	queue1.CompleteJob(job1.ID, outputPath, 500000)
 
 	// Create a new queue from the same file
 	queue2, err := NewQueue(queueFile)
@@ -164,16 +174,27 @@ func TestQueuePersistence(t *testing.T) {
 }
 
 func TestQueueCompleteMarksOutputProcessed(t *testing.T) {
+	tmpDir := t.TempDir()
+	inputPath := filepath.Join(tmpDir, "video.mp4")
+	outputPath := filepath.Join(tmpDir, "video.mkv")
+
+	if err := os.WriteFile(inputPath, []byte("input"), 0644); err != nil {
+		t.Fatalf("failed to create input file: %v", err)
+	}
+	if err := os.WriteFile(outputPath, []byte("output"), 0644); err != nil {
+		t.Fatalf("failed to create output file: %v", err)
+	}
+
 	queue, _ := NewQueue("")
 
 	probe := &ffmpeg.ProbeResult{
-		Path:     "/media/video.mp4",
+		Path:     inputPath,
 		Size:     1000000,
 		Duration: 10 * time.Second,
 	}
 
 	job, _ := queue.Add(probe.Path, "compress", probe)
-	if err := queue.CompleteJob(job.ID, "/media/video.mkv", 500000); err != nil {
+	if err := queue.CompleteJob(job.ID, outputPath, 500000); err != nil {
 		t.Fatalf("failed to complete job: %v", err)
 	}
 
@@ -181,8 +202,8 @@ func TestQueueCompleteMarksOutputProcessed(t *testing.T) {
 	if _, ok := processed[probe.Path]; !ok {
 		t.Errorf("expected processed history to include %s", probe.Path)
 	}
-	if _, ok := processed["/media/video.mkv"]; !ok {
-		t.Error("expected processed history to include /media/video.mkv")
+	if _, ok := processed[outputPath]; !ok {
+		t.Errorf("expected processed history to include %s", outputPath)
 	}
 }
 

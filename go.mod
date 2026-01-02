@@ -6,6 +6,7 @@ toolchain go1.24.3
 
 require (
 	github.com/coreos/go-oidc/v3 v3.17.0
+	github.com/fsnotify/fsnotify v1.8.0
 	golang.org/x/crypto v0.46.0
 	golang.org/x/oauth2 v0.34.0
 	gopkg.in/yaml.v3 v3.0.1

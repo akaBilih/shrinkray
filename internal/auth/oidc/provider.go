@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ type Provider struct {
 	oidcProvider    *oidc.Provider
 	verifier        *oidc.IDTokenVerifier
 	oauth2Config    *oauth2.Config
+	endSessionURL   string
 	secret          []byte
 	cookieName      string
 	stateCookieName string
@@ -83,10 +85,19 @@ func NewProvider(ctx context.Context, issuer, clientID, clientSecret, redirectUR
 		allowed[group] = struct{}{}
 	}
 
+	endSessionURL := ""
+	var metadata struct {
+		EndSessionEndpoint string `json:"end_session_endpoint"`
+	}
+	if err := provider.Claims(&metadata); err == nil {
+		endSessionURL = metadata.EndSessionEndpoint
+	}
+
 	return &Provider{
 		oidcProvider:    provider,
 		verifier:        provider.Verifier(&oidc.Config{ClientID: clientID}),
 		oauth2Config:    oauthConfig,
+		endSessionURL:   endSessionURL,
 		secret:          []byte(secret),
 		cookieName:      defaultCookieName,
 		stateCookieName: defaultStateCookie,
@@ -105,16 +116,16 @@ func (p *Provider) Authenticate(r *http.Request) (*auth.User, error) {
 
 	payload, err := p.verifySignedValue(cookie.Value)
 	if err != nil {
-		return nil, err
+		return nil, auth.ErrSessionInvalid
 	}
 
 	var session sessionPayload
 	if err := json.Unmarshal(payload, &session); err != nil {
-		return nil, err
+		return nil, auth.ErrSessionInvalid
 	}
 	expiry := time.Unix(session.ExpiresAt, 0)
 	if expiry.Before(time.Now()) {
-		return nil, errors.New("session expired")
+		return nil, auth.ErrSessionExpired
 	}
 	return &auth.User{
 		ID:    session.Subject,
@@ -130,34 +141,10 @@ func (p *Provider) LoginURL(_ *http.Request) (string, error) {
 
 // HandleLogin initiates the authorization code flow.
 func (p *Provider) HandleLogin(w http.ResponseWriter, r *http.Request) error {
-	state, err := generateNonce()
+	state, nonce, err := p.ensureStateCookie(w, r)
 	if err != nil {
 		return err
 	}
-	nonce, err := generateNonce()
-	if err != nil {
-		return err
-	}
-	expires := time.Now().Add(defaultStateTimeout)
-	statePayload := statePayload{
-		State:     state,
-		Nonce:     nonce,
-		ExpiresAt: expires.Unix(),
-	}
-	encoded, err := p.signStatePayload(statePayload)
-	if err != nil {
-		return err
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     p.stateCookieName,
-		Value:    encoded,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  expires,
-		Secure:   r.TLS != nil,
-	})
 
 	loginURL := p.oauth2Config.AuthCodeURL(state, oidc.Nonce(nonce))
 	http.Redirect(w, r, loginURL, http.StatusFound)
@@ -172,23 +159,15 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) error 
 		return errors.New("missing code or state")
 	}
 
-	cookie, err := r.Cookie(p.stateCookieName)
-	if err != nil {
-		return errors.New("missing auth state")
-	}
-
-	stateData, err := p.verifyStateCookie(cookie.Value)
+	stateData, err := p.loadStateCookie(r)
 	if err != nil {
 		return err
-	}
-	if stateData.ExpiresAt < time.Now().Unix() {
-		return errors.New("state expired")
 	}
 	if subtle.ConstantTimeCompare([]byte(state), []byte(stateData.State)) != 1 {
 		return errors.New("invalid state")
 	}
 
-	clearStateCookie(w, p.stateCookieName)
+	clearStateCookie(w, r, p.stateCookieName)
 
 	token, err := p.oauth2Config.Exchange(r.Context(), code)
 	if err != nil {
@@ -243,11 +222,91 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) error 
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiry,
-		Secure:   r.TLS != nil,
+		Secure:   isSecureRequest(r),
 	})
 
 	http.Redirect(w, r, "/", http.StatusFound)
 	return nil
+}
+
+// HandleLogout clears the session cookie and triggers provider logout when available.
+func (p *Provider) HandleLogout(w http.ResponseWriter, r *http.Request) error {
+	p.ClearSession(w, r)
+
+	if p.endSessionURL != "" {
+		endURL, err := url.Parse(p.endSessionURL)
+		if err == nil {
+			query := endURL.Query()
+			query.Set("post_logout_redirect_uri", baseURL(r)+"/")
+			endURL.RawQuery = query.Encode()
+			http.Redirect(w, r, endURL.String(), http.StatusFound)
+			return nil
+		}
+	}
+
+	http.Redirect(w, r, "/auth/login", http.StatusFound)
+	return nil
+}
+
+// ClearSession removes the session cookie.
+func (p *Provider) ClearSession(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     p.cookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
+	})
+}
+
+func (p *Provider) ensureStateCookie(w http.ResponseWriter, r *http.Request) (string, string, error) {
+	state, err := generateNonce()
+	if err != nil {
+		return "", "", err
+	}
+	nonce, err := generateNonce()
+	if err != nil {
+		return "", "", err
+	}
+	expires := time.Now().Add(defaultStateTimeout)
+	statePayload := statePayload{
+		State:     state,
+		Nonce:     nonce,
+		ExpiresAt: expires.Unix(),
+	}
+	encoded, err := p.signStatePayload(statePayload)
+	if err != nil {
+		return "", "", err
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     p.stateCookieName,
+		Value:    encoded,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expires,
+		Secure:   isSecureRequest(r),
+	})
+
+	return state, nonce, nil
+}
+
+func (p *Provider) loadStateCookie(r *http.Request) (statePayload, error) {
+	cookie, err := r.Cookie(p.stateCookieName)
+	if err != nil {
+		return statePayload{}, errors.New("missing auth state")
+	}
+	stateData, err := p.verifyStateCookie(cookie.Value)
+	if err != nil {
+		return statePayload{}, err
+	}
+	if stateData.ExpiresAt < time.Now().Unix() {
+		return statePayload{}, errors.New("state expired")
+	}
+	return stateData, nil
 }
 
 type statePayload struct {
@@ -397,13 +456,51 @@ func generateNonce() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(random), nil
 }
 
-func clearStateCookie(w http.ResponseWriter, name string) {
+func baseURL(r *http.Request) string {
+	scheme := "http"
+	host := r.Host
+	if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+		parts := strings.Split(forwardedHost, ",")
+		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+			host = strings.TrimSpace(parts[0])
+		}
+	}
+	if forwarded := r.Header.Get("X-Forwarded-Proto"); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+			scheme = strings.TrimSpace(parts[0])
+		}
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+func isSecureRequest(r *http.Request) bool {
+	if forwarded := r.Header.Get("X-Forwarded-Proto"); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+			return strings.EqualFold(strings.TrimSpace(parts[0]), "https")
+		}
+	}
+	return r.TLS != nil
+}
+
+func stateCookieSameSite(r *http.Request) http.SameSite {
+	if isSecureRequest(r) {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
+}
+
+func clearStateCookie(w http.ResponseWriter, r *http.Request, name string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: stateCookieSameSite(r),
+		Secure:   isSecureRequest(r),
 	})
 }

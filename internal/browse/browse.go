@@ -26,6 +26,7 @@ type Entry struct {
 	TotalSize      int64               `json:"total_size,omitempty"` // For directories: total size of video files
 	Processed      bool                `json:"processed,omitempty"`  // For video files: true if already processed
 	ProcessedCount int                 `json:"processed_count"`      // For directories: number of processed video files
+	Pending        bool                `json:"pending,omitempty"`    // True if queued for processing
 }
 
 // BrowseResult contains the result of browsing a directory
@@ -41,6 +42,7 @@ type BrowseResult struct {
 type Browser struct {
 	prober            *ffmpeg.Prober
 	mediaRoot         string
+	mediaRootMu       sync.RWMutex
 	hideProcessingTmp atomic.Bool
 
 	// Cache for probe results (path -> result)
@@ -50,16 +52,35 @@ type Browser struct {
 
 // NewBrowser creates a new Browser with the given prober and media root
 func NewBrowser(prober *ffmpeg.Prober, mediaRoot string) *Browser {
-	// Convert to absolute path for consistent comparisons
-	absRoot, err := filepath.Abs(mediaRoot)
-	if err != nil {
-		absRoot = mediaRoot
-	}
 	return &Browser{
 		prober:    prober,
-		mediaRoot: absRoot,
+		mediaRoot: normalizeMediaRoot(mediaRoot),
 		cache:     make(map[string]*ffmpeg.ProbeResult),
 	}
+}
+
+func normalizeMediaRoot(mediaRoot string) string {
+	absRoot, err := filepath.Abs(mediaRoot)
+	if err != nil {
+		return mediaRoot
+	}
+	return absRoot
+}
+
+// MediaRoot returns the current media root path.
+func (b *Browser) MediaRoot() string {
+	b.mediaRootMu.RLock()
+	defer b.mediaRootMu.RUnlock()
+	return b.mediaRoot
+}
+
+// SetMediaRoot updates the media root path and clears cached probe data.
+func (b *Browser) SetMediaRoot(mediaRoot string) {
+	normalized := normalizeMediaRoot(mediaRoot)
+	b.mediaRootMu.Lock()
+	b.mediaRoot = normalized
+	b.mediaRootMu.Unlock()
+	b.ClearCache()
 }
 
 // SetHideProcessingTmp controls whether shrinkray.tmp files are hidden from browse results.
@@ -74,10 +95,11 @@ func (b *Browser) Browse(ctx context.Context, path string) (*BrowseResult, error
 	if err != nil {
 		cleanPath = filepath.Clean(path)
 	}
+	mediaRoot := b.MediaRoot()
 
 	// Ensure path is within media root
-	if !strings.HasPrefix(cleanPath, b.mediaRoot) {
-		cleanPath = b.mediaRoot
+	if !strings.HasPrefix(cleanPath, mediaRoot) {
+		cleanPath = mediaRoot
 	}
 
 	entries, err := os.ReadDir(cleanPath)
@@ -91,7 +113,7 @@ func (b *Browser) Browse(ctx context.Context, path string) (*BrowseResult, error
 	}
 
 	// Set parent path (if not at root)
-	if cleanPath != b.mediaRoot {
+	if cleanPath != mediaRoot {
 		result.Parent = filepath.Dir(cleanPath)
 	}
 
@@ -268,7 +290,7 @@ func (b *Browser) GetVideoFilesWithOptions(ctx context.Context, paths []string, 
 		}
 
 		// Ensure path is within media root
-		if !strings.HasPrefix(cleanPath, b.mediaRoot) {
+		if !strings.HasPrefix(cleanPath, b.MediaRoot()) {
 			continue
 		}
 
@@ -341,7 +363,8 @@ type DiscoveredFile struct {
 func (b *Browser) DiscoverVideoFiles(ctx context.Context, paths []string, opts GetVideoFilesOptions) ([]DiscoveredFile, error) {
 	var results []DiscoveredFile
 
-	log.Printf("[browse] DiscoverVideoFiles: mediaRoot=%s, paths=%v, recursive=%v", b.mediaRoot, paths, opts.Recursive)
+	mediaRoot := b.MediaRoot()
+	log.Printf("[browse] DiscoverVideoFiles: mediaRoot=%s, paths=%v, recursive=%v", mediaRoot, paths, opts.Recursive)
 
 	for _, path := range paths {
 		// Convert to absolute path for consistent comparisons
@@ -351,8 +374,8 @@ func (b *Browser) DiscoverVideoFiles(ctx context.Context, paths []string, opts G
 		}
 
 		// Ensure path is within media root
-		if !strings.HasPrefix(cleanPath, b.mediaRoot) {
-			log.Printf("[browse] Path %s is outside media root %s, skipping", cleanPath, b.mediaRoot)
+		if !strings.HasPrefix(cleanPath, mediaRoot) {
+			log.Printf("[browse] Path %s is outside media root %s, skipping", cleanPath, mediaRoot)
 			continue
 		}
 
@@ -496,7 +519,7 @@ func isTrickplayTmp(name string) bool {
 // This is useful for testing and direct access from other packages.
 func DiscoverMediaFiles(root string, recursive bool, maxDepth *int) ([]string, error) {
 	// Create a temporary browser just for discovery (no prober or media root needed for this)
-	b := &Browser{mediaRoot: root}
+	b := &Browser{mediaRoot: normalizeMediaRoot(root)}
 	return b.discoverMediaFiles(root, recursive, maxDepth)
 }
 

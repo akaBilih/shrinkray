@@ -642,12 +642,63 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 
 // ProcessedPaths returns a copy of processed input paths.
 func (q *Queue) ProcessedPaths() map[string]struct{} {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	paths := make(map[string]struct{}, len(q.processedPaths))
+	removed := 0
+	for path := range q.processedPaths {
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				delete(q.processedPaths, path)
+				removed++
+			}
+			continue
+		}
+		paths[path] = struct{}{}
+	}
+	if removed > 0 {
+		if err := q.save(); err != nil {
+			fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		}
+	}
+	return paths
+}
+
+// PendingPaths returns a copy of input paths for pending jobs.
+func (q *Queue) PendingPaths() map[string]struct{} {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
-	paths := make(map[string]struct{}, len(q.processedPaths))
-	for path := range q.processedPaths {
-		paths[path] = struct{}{}
+	paths := make(map[string]struct{})
+	for _, job := range q.jobs {
+		if job.Status != StatusPending && job.Status != StatusPendingProbe {
+			continue
+		}
+		absPath, err := filepath.Abs(job.InputPath)
+		if err != nil {
+			absPath = job.InputPath
+		}
+		paths[absPath] = struct{}{}
+	}
+	return paths
+}
+
+// EnqueuedPaths returns a copy of input paths for jobs that are still in the queue.
+func (q *Queue) EnqueuedPaths() map[string]struct{} {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	paths := make(map[string]struct{})
+	for _, job := range q.jobs {
+		if job.IsTerminal() {
+			continue
+		}
+		absPath, err := filepath.Abs(job.InputPath)
+		if err != nil {
+			absPath = job.InputPath
+		}
+		paths[absPath] = struct{}{}
 	}
 	return paths
 }
