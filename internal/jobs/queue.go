@@ -404,6 +404,8 @@ func (q *Queue) UpdateJobAfterProbe(id string, probe *ffmpeg.ProbeResult) error 
 	job.Bitrate = probe.Bitrate
 	job.InputSize = probe.Size
 	job.SubtitleCodecs = probe.SubtitleCodecs
+	job.BitDepth = probe.BitDepth
+	job.PixFmt = probe.PixFmt
 
 	// Check if file should be skipped
 	preset := ffmpeg.GetPreset(job.PresetID)
