@@ -261,9 +261,23 @@ func TestBuildPresetArgsVAAPIAV1(t *testing.T) {
 	outputArgsStr := strings.Join(outputArgs, " ")
 	t.Logf("VAAPI AV1 output args: %v", outputArgs)
 
-	// Must have explicit video filter with scale_vaapi=format=nv12 to prevent auto_scale insertion
-	if !containsArgPair(outputArgs, "-vf", "scale_vaapi=format=nv12") {
-		t.Errorf("expected -vf scale_vaapi=format=nv12 to prevent auto_scale error, got: %s", outputArgsStr)
+	// Must have explicit video filter with scale_vaapi including format and color params
+	// to prevent auto_scale insertion during mid-stream color metadata changes
+	foundVAAPIFilter := false
+	for i, arg := range outputArgs {
+		if arg == "-vf" && i+1 < len(outputArgs) {
+			filter := outputArgs[i+1]
+			// Check for scale_vaapi with format=nv12 and color output params
+			if strings.Contains(filter, "scale_vaapi") &&
+				strings.Contains(filter, "format=nv12") &&
+				strings.Contains(filter, "out_color_matrix=bt709") {
+				foundVAAPIFilter = true
+				t.Logf("Found correct VAAPI filter with color params: %s", filter)
+			}
+		}
+	}
+	if !foundVAAPIFilter {
+		t.Errorf("expected -vf scale_vaapi with format=nv12 and out_color_matrix=bt709, got: %s", outputArgsStr)
 	}
 
 	// Must use av1_vaapi encoder
@@ -307,23 +321,24 @@ func TestBuildPresetArgsVAAPIAV1WithScaling(t *testing.T) {
 	outputArgsStr := strings.Join(outputArgs, " ")
 	t.Logf("VAAPI AV1 1080p output args: %v", outputArgs)
 
-	// With scaling, should use scale_vaapi with height and format
-	// Expected format: scale_vaapi=w=-2:h='min(ih,1080)':format=nv12
+	// With scaling, should use scale_vaapi with height, format, and color params
+	// Expected format: scale_vaapi=w=-2:h='min(ih,1080)':format=nv12:out_range=tv:out_color_matrix=bt709:...
 	foundCorrectFilter := false
 	for i, arg := range outputArgs {
 		if arg == "-vf" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "1080") &&
-				strings.Contains(filter, "format=nv12") {
+				strings.Contains(filter, "format=nv12") &&
+				strings.Contains(filter, "out_color_matrix=bt709") {
 				foundCorrectFilter = true
-				t.Logf("Found correct VAAPI scale filter: %s", filter)
+				t.Logf("Found correct VAAPI scale filter with color params: %s", filter)
 			}
 		}
 	}
 
 	if !foundCorrectFilter {
-		t.Errorf("expected scale_vaapi filter with 1080 and format=nv12, got: %s", outputArgsStr)
+		t.Errorf("expected scale_vaapi filter with 1080, format=nv12, and out_color_matrix=bt709, got: %s", outputArgsStr)
 	}
 }
 
@@ -341,9 +356,20 @@ func TestBuildPresetArgsVAAPIHEVC(t *testing.T) {
 	outputArgsStr := strings.Join(outputArgs, " ")
 	t.Logf("VAAPI HEVC output args: %v", outputArgs)
 
-	// VAAPI HEVC also needs explicit filter
-	if !containsArgPair(outputArgs, "-vf", "scale_vaapi=format=nv12") {
-		t.Errorf("expected -vf scale_vaapi=format=nv12 for VAAPI HEVC, got: %s", outputArgsStr)
+	// VAAPI HEVC also needs explicit filter with color params
+	foundVAAPIFilter := false
+	for i, arg := range outputArgs {
+		if arg == "-vf" && i+1 < len(outputArgs) {
+			filter := outputArgs[i+1]
+			if strings.Contains(filter, "scale_vaapi") &&
+				strings.Contains(filter, "format=nv12") &&
+				strings.Contains(filter, "out_color_matrix=bt709") {
+				foundVAAPIFilter = true
+			}
+		}
+	}
+	if !foundVAAPIFilter {
+		t.Errorf("expected -vf scale_vaapi with format=nv12 and out_color_matrix=bt709 for VAAPI HEVC, got: %s", outputArgsStr)
 	}
 
 	// Must use hevc_vaapi encoder
@@ -466,18 +492,96 @@ func TestBuildPresetArgsVAAPI10Bit(t *testing.T) {
 	outputArgsStr := strings.Join(outputArgs, " ")
 	t.Logf("VAAPI HEVC 10-bit output args: %v", outputArgs)
 
-	// 10-bit content should use p010 format
-	if !containsArgPair(outputArgs, "-vf", "scale_vaapi=format=p010") {
-		t.Errorf("expected -vf scale_vaapi=format=p010 for 10-bit content, got: %s", outputArgsStr)
+	// 10-bit content should use p010 format with bt2020 color params
+	found10bit := false
+	for i, arg := range outputArgs {
+		if arg == "-vf" && i+1 < len(outputArgs) {
+			filter := outputArgs[i+1]
+			if strings.Contains(filter, "scale_vaapi") &&
+				strings.Contains(filter, "format=p010") &&
+				strings.Contains(filter, "out_color_matrix=bt2020nc") {
+				found10bit = true
+				t.Logf("Found correct 10-bit VAAPI filter: %s", filter)
+			}
+		}
+	}
+	if !found10bit {
+		t.Errorf("expected scale_vaapi with format=p010 and out_color_matrix=bt2020nc for 10-bit content, got: %s", outputArgsStr)
 	}
 
-	// Test 12-bit content (should also use p010)
+	// Test 12-bit content (should also use p010 with bt2020)
 	_, outputArgs = BuildPresetArgs(preset, 5000000, nil, "convert", 12)
 	outputArgsStr = strings.Join(outputArgs, " ")
 	t.Logf("VAAPI HEVC 12-bit output args: %v", outputArgs)
 
-	if !containsArgPair(outputArgs, "-vf", "scale_vaapi=format=p010") {
-		t.Errorf("expected -vf scale_vaapi=format=p010 for 12-bit content, got: %s", outputArgsStr)
+	found12bit := false
+	for i, arg := range outputArgs {
+		if arg == "-vf" && i+1 < len(outputArgs) {
+			filter := outputArgs[i+1]
+			if strings.Contains(filter, "scale_vaapi") &&
+				strings.Contains(filter, "format=p010") &&
+				strings.Contains(filter, "out_color_matrix=bt2020nc") {
+				found12bit = true
+			}
+		}
+	}
+	if !found12bit {
+		t.Errorf("expected scale_vaapi with format=p010 and out_color_matrix=bt2020nc for 12-bit content, got: %s", outputArgsStr)
+	}
+}
+
+// TestBuildPresetArgsVAAPIColorParamsPreventReconfiguration verifies that VAAPI filter
+// includes all color output parameters to prevent mid-stream filter graph reconfiguration.
+// This test addresses the issue: "Reconfiguring filter graph because video parameters
+// changed to vaapi(tv, bt709)" followed by "Impossible to convert between formats".
+func TestBuildPresetArgsVAAPIColorParamsPreventReconfiguration(t *testing.T) {
+	preset := &Preset{
+		ID:        "compress-av1",
+		Name:      "Compress (AV1)",
+		Encoder:   HWAccelVAAPI,
+		Codec:     CodecAV1,
+		MaxHeight: 0, // No scaling
+	}
+
+	_, outputArgs := BuildPresetArgs(preset, 5000000, nil, "convert", 8)
+
+	// Find the -vf argument
+	var filter string
+	for i, arg := range outputArgs {
+		if arg == "-vf" && i+1 < len(outputArgs) {
+			filter = outputArgs[i+1]
+			break
+		}
+	}
+
+	if filter == "" {
+		t.Fatal("expected -vf argument but none found")
+	}
+
+	t.Logf("Filter: %s", filter)
+
+	// Verify all required color params are present to prevent reconfiguration
+	requiredParams := []string{
+		"scale_vaapi",
+		"format=nv12",
+		"out_range=tv",
+		"out_color_matrix=bt709",
+		"out_color_primaries=bt709",
+		"out_color_transfer=bt709",
+	}
+
+	for _, param := range requiredParams {
+		if !strings.Contains(filter, param) {
+			t.Errorf("filter missing required param %q to prevent reconfiguration: %s", param, filter)
+		}
+	}
+
+	// Verify no auto_scale would be inserted (filter is fully explicit)
+	// The presence of all color params ensures FFmpeg won't reconfigure
+	if !strings.Contains(filter, "out_color_matrix") ||
+		!strings.Contains(filter, "out_color_primaries") ||
+		!strings.Contains(filter, "out_color_transfer") {
+		t.Error("filter must include all color output params (out_color_matrix, out_color_primaries, out_color_transfer) to prevent mid-stream reconfiguration")
 	}
 }
 
@@ -496,21 +600,22 @@ func TestBuildPresetArgsVAAPI10BitWithScaling(t *testing.T) {
 	outputArgsStr := strings.Join(outputArgs, " ")
 	t.Logf("VAAPI HEVC 10-bit 1080p output args: %v", outputArgs)
 
-	// Should have scale_vaapi with 1080 height AND p010 format
+	// Should have scale_vaapi with 1080 height, p010 format, and bt2020 color params
 	foundCorrectFilter := false
 	for i, arg := range outputArgs {
 		if arg == "-vf" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "1080") &&
-				strings.Contains(filter, "format=p010") {
+				strings.Contains(filter, "format=p010") &&
+				strings.Contains(filter, "out_color_matrix=bt2020nc") {
 				foundCorrectFilter = true
-				t.Logf("Found correct 10-bit VAAPI scale filter: %s", filter)
+				t.Logf("Found correct 10-bit VAAPI scale filter with color params: %s", filter)
 			}
 		}
 	}
 
 	if !foundCorrectFilter {
-		t.Errorf("expected scale_vaapi filter with 1080 and format=p010, got: %s", outputArgsStr)
+		t.Errorf("expected scale_vaapi filter with 1080, format=p010, and out_color_matrix=bt2020nc, got: %s", outputArgsStr)
 	}
 }
