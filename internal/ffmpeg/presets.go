@@ -352,18 +352,26 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	// Stream mapping: Use explicit stream selectors to avoid "Multiple -codec/-c... options"
 	// warning. Map first video for transcoding, additional video streams (cover art) with copy,
 	// and all audio/subtitle streams.
+	//
+	// IMPORTANT: Encoder-specific options (quality, extra args) MUST come immediately after
+	// -c:v:0 and BEFORE -c:v:1 copy. FFmpeg associates options with streams based on position,
+	// so options after -c:v:1 would try to apply to the copy stream (which ignores them).
+	// See: https://ffmpeg.org/ffmpeg.html (stream specifiers section)
 	outputArgs = append(outputArgs,
 		"-map", "0:v:0",          // First video stream (for transcoding)
 		"-map", "0:v:1?",         // Second video stream if exists (cover art) - ? means optional
 		"-map", "0:a?",           // All audio streams
 		"-map", "0:s?",           // All subtitle streams
 		"-c:v:0", config.encoder, // Transcode first video stream
-		"-c:v:1", "copy",         // Copy second video stream (cover art) if present
 	)
 
-	// Add quality and encoder-specific args (apply to -c:v:0)
+	// Add quality and encoder-specific args immediately after -c:v:0 encoder selection
+	// These must come before -c:v:1 to be associated with stream v:0
 	outputArgs = append(outputArgs, config.qualityFlag, qualityStr)
 	outputArgs = append(outputArgs, config.extraArgs...)
+
+	// Now add the copy codec for cover art (second video stream if present)
+	outputArgs = append(outputArgs, "-c:v:1", "copy")
 
 	// Copy audio and handle subtitle codecs (convert mov_text if present).
 	outputArgs = append(outputArgs, "-c:a", "copy")
