@@ -532,8 +532,10 @@ func TestBuildPresetArgsVAAPI10Bit(t *testing.T) {
 
 // TestBuildPresetArgsVAAPIPreventReconfiguration verifies that VAAPI encoder includes
 // all necessary flags to prevent mid-stream filter graph reconfiguration.
-// This test addresses the issue: "Reconfiguring filter graph because video parameters
-// changed to vaapi(tv, bt709)" followed by "Impossible to convert between formats".
+// This test addresses TWO types of reconfiguration issues:
+// 1. "Reconfiguring filter graph because video parameters changed" - prevented by -reinit_filter 0
+// 2. "Reconfiguring filter graph because hwaccel changed" - prevented by forcing input colorspace
+// Both cause: "Impossible to convert between formats" error after 40+ minutes.
 func TestBuildPresetArgsVAAPIPreventReconfiguration(t *testing.T) {
 	preset := &Preset{
 		ID:        "compress-av1",
@@ -548,12 +550,25 @@ func TestBuildPresetArgsVAAPIPreventReconfiguration(t *testing.T) {
 	t.Logf("VAAPI input args: %v", inputArgs)
 	t.Logf("VAAPI output args: %v", outputArgs)
 
-	// CRITICAL: Verify -reinit_filter 0 is in INPUT args (not output args!)
-	// This is the PRIMARY fix - it completely disables filter reinitialization
-	// when input parameters change mid-stream, preventing the auto_scale insertion
-	// Note: -reinit_filter is an input option, must go before -i
+	// Fix 1: -reinit_filter 0 prevents "video parameters changed" reconfiguration
 	if !containsArgPair(inputArgs, "-reinit_filter", "0") {
-		t.Errorf("expected -reinit_filter 0 in INPUT args to prevent mid-stream reconfiguration, got: %s", inputArgsStr)
+		t.Errorf("expected -reinit_filter 0 in INPUT args, got: %s", inputArgsStr)
+	}
+
+	// Fix 2: Force input colorspace to prevent "hwaccel changed" reconfiguration
+	// When input has csp:unknown and FFmpeg discovers bt709 mid-stream, it triggers
+	// reconfiguration even with -reinit_filter 0. Forcing colorspace from start prevents this.
+	if !containsArgPair(inputArgs, "-color_primaries", "bt709") {
+		t.Errorf("expected -color_primaries bt709 in INPUT args for 8-bit content, got: %s", inputArgsStr)
+	}
+	if !containsArgPair(inputArgs, "-color_trc", "bt709") {
+		t.Errorf("expected -color_trc bt709 in INPUT args for 8-bit content, got: %s", inputArgsStr)
+	}
+	if !containsArgPair(inputArgs, "-colorspace", "bt709") {
+		t.Errorf("expected -colorspace bt709 in INPUT args for 8-bit content, got: %s", inputArgsStr)
+	}
+	if !containsArgPair(inputArgs, "-color_range", "tv") {
+		t.Errorf("expected -color_range tv in INPUT args for 8-bit content, got: %s", inputArgsStr)
 	}
 
 	// Find the -vf argument
@@ -571,7 +586,7 @@ func TestBuildPresetArgsVAAPIPreventReconfiguration(t *testing.T) {
 
 	t.Logf("Filter: %s", filter)
 
-	// Verify all required color params are present (secondary defense)
+	// Verify all required color params in filter (secondary defense for output)
 	requiredParams := []string{
 		"scale_vaapi",
 		"format=nv12",
@@ -585,6 +600,35 @@ func TestBuildPresetArgsVAAPIPreventReconfiguration(t *testing.T) {
 		if !strings.Contains(filter, param) {
 			t.Errorf("filter missing required param %q: %s", param, filter)
 		}
+	}
+}
+
+// TestBuildPresetArgsVAAPI10BitPreventReconfiguration verifies 10-bit content uses bt2020 colorspace.
+func TestBuildPresetArgsVAAPI10BitPreventReconfiguration(t *testing.T) {
+	preset := &Preset{
+		ID:        "compress-hevc",
+		Name:      "Compress (HEVC)",
+		Encoder:   HWAccelVAAPI,
+		Codec:     CodecHEVC,
+		MaxHeight: 0,
+	}
+
+	inputArgs, _ := BuildPresetArgs(preset, 5000000, nil, "convert", 10)
+	inputArgsStr := strings.Join(inputArgs, " ")
+	t.Logf("VAAPI 10-bit input args: %v", inputArgs)
+
+	// 10-bit content should use bt2020 colorspace
+	if !containsArgPair(inputArgs, "-color_primaries", "bt2020") {
+		t.Errorf("expected -color_primaries bt2020 for 10-bit content, got: %s", inputArgsStr)
+	}
+	if !containsArgPair(inputArgs, "-color_trc", "smpte2084") {
+		t.Errorf("expected -color_trc smpte2084 for 10-bit HDR content, got: %s", inputArgsStr)
+	}
+	if !containsArgPair(inputArgs, "-colorspace", "bt2020nc") {
+		t.Errorf("expected -colorspace bt2020nc for 10-bit content, got: %s", inputArgsStr)
+	}
+	if !containsArgPair(inputArgs, "-color_range", "tv") {
+		t.Errorf("expected -color_range tv in INPUT args, got: %s", inputArgsStr)
 	}
 }
 
