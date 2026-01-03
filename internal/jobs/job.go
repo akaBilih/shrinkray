@@ -14,6 +14,8 @@ const (
 	StatusComplete     Status = "complete"
 	StatusFailed       Status = "failed"
 	StatusCancelled    Status = "cancelled"
+	StatusSkipped      Status = "skipped"  // File already in target format or meets criteria
+	StatusNoGain       Status = "no_gain"  // Transcoded file was larger than original
 )
 
 // Job represents a transcoding job
@@ -38,6 +40,8 @@ type Job struct {
 	SpaceSaved     int64     `json:"space_saved,omitempty"`    // InputSize - OutputSize
 	Duration       int64     `json:"duration_ms,omitempty"`    // Video duration in ms
 	Bitrate        int64     `json:"bitrate,omitempty"`        // Source video bitrate in bits/s
+	BitDepth       int       `json:"bit_depth,omitempty"`      // Color bit depth (8, 10, 12)
+	PixFmt         string    `json:"pix_fmt,omitempty"`        // Pixel format (e.g., yuv420p, yuv444p)
 	TranscodeTime  int64     `json:"transcode_secs,omitempty"` // Time to transcode in seconds
 	CreatedAt      time.Time `json:"created_at"`
 	StartedAt      time.Time `json:"started_at,omitempty"`
@@ -48,11 +52,15 @@ type Job struct {
 	IsSoftwareFallback bool   `json:"is_software_fallback,omitempty"` // True if this job is a SW retry
 	OriginalJobID      string `json:"original_job_id,omitempty"`      // ID of the failed HW job
 	FallbackReason     string `json:"fallback_reason,omitempty"`      // Why HW encoding failed
+
+	// Force transcode fields - used when user wants to bypass skip/size checks
+	ForceTranscode bool `json:"force_transcode,omitempty"` // Bypass skip checks and size comparison
 }
 
 // IsTerminal returns true if the job is in a terminal state
 func (j *Job) IsTerminal() bool {
-	return j.Status == StatusComplete || j.Status == StatusFailed || j.Status == StatusCancelled
+	return j.Status == StatusComplete || j.Status == StatusFailed || j.Status == StatusCancelled ||
+		j.Status == StatusSkipped || j.Status == StatusNoGain
 }
 
 // IsWorkable returns true if the job can be picked up by a worker
@@ -67,7 +75,7 @@ func (j *Job) NeedsProbe() bool {
 
 // JobEvent represents an event for SSE streaming
 type JobEvent struct {
-	Type string `json:"type"` // "added", "batch_added", "probed", "started", "progress", "complete", "failed", "cancelled", "removed"
+	Type string `json:"type"` // "added", "batch_added", "probed", "started", "progress", "complete", "failed", "cancelled", "removed", "skipped", "no_gain"
 	Job  *Job   `json:"job,omitempty"`
 
 	// Batch of jobs - used for "batch_added" event to reduce SSE event flood
