@@ -23,7 +23,7 @@ This fork includes fixes and features not in the original:
 | **Pushover notifications** | ✅ | ✅ |
 | **Skip already-encoded files** | ✅ | ✅ |
 | **Scheduling (time restrictions)** | ❌ | ✅ |
-| **Dark mode** | ❌ | ✅ |
+| **Dark mode** | ✅ | ✅ |
 | **Quality/CRF sliders** | ❌ | ✅ |
 | **Infinite scroll queue** | ❌ | ✅ |
 
