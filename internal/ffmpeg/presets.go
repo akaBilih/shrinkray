@@ -169,11 +169,31 @@ func hasVAAPIOutputFormat(hwaccelArgs []string) bool {
 	return false
 }
 
+// isVAAPIIncompatiblePixFmt returns true if the pixel format cannot be hardware decoded by VAAPI.
+// These formats require software decode + hwupload to VAAPI for encoding.
+func isVAAPIIncompatiblePixFmt(pixFmt string) bool {
+	// VAAPI typically only supports 4:2:0 formats (yuv420p, nv12, p010)
+	// 4:4:4 formats like yuv444p are not supported by VAAPI decode
+	incompatible := []string{
+		"yuv444p", "yuv444p10", "yuv444p10le", "yuv444p10be",
+		"yuv444p12", "yuv444p12le", "yuv444p12be",
+		"yuvj444p", // JPEG full-range 4:4:4
+		"gbrp", "gbrp10", "gbrp12", // Planar RGB
+	}
+	for _, fmt := range incompatible {
+		if pixFmt == fmt {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildPresetArgs builds FFmpeg arguments for a preset with the specified encoder
 // sourceBitrate is the source video bitrate in bits/second (used for dynamic bitrate calculation)
 // bitDepth is the source video bit depth (8, 10, 12) - used for VAAPI format selection
+// pixFmt is the source pixel format - used to detect formats requiring software decode
 // Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
-func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []string, subtitleHandling string, bitDepth int) (inputArgs []string, outputArgs []string) {
+func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []string, subtitleHandling string, bitDepth int, pixFmt string) (inputArgs []string, outputArgs []string) {
 	key := EncoderKey{preset.Encoder, preset.Codec}
 	config, ok := encoderConfigs[key]
 	if !ok {
@@ -190,15 +210,24 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	)
 
 	// Hardware acceleration for decoding
-	for _, arg := range config.hwaccelArgs {
-		// Fill in VAAPI device path dynamically
-		if arg == "" && len(inputArgs) > 0 {
-			lastArg := inputArgs[len(inputArgs)-1]
-			if lastArg == "-vaapi_device" || lastArg == "-hwaccel_device" {
-				arg = GetVAAPIDevice()
+	// Skip hwaccel for pixel formats that VAAPI can't decode (e.g., yuv444p from AI upscales)
+	// These require software decode → format conversion → hwupload → VAAPI encode
+	useHWAccelDecode := !isVAAPIIncompatiblePixFmt(pixFmt) || preset.Encoder != HWAccelVAAPI
+	if useHWAccelDecode {
+		for _, arg := range config.hwaccelArgs {
+			// Fill in VAAPI device path dynamically
+			if arg == "" && len(inputArgs) > 0 {
+				lastArg := inputArgs[len(inputArgs)-1]
+				if lastArg == "-vaapi_device" || lastArg == "-hwaccel_device" {
+					arg = GetVAAPIDevice()
+				}
 			}
+			inputArgs = append(inputArgs, arg)
 		}
-		inputArgs = append(inputArgs, arg)
+	} else {
+		// For VAAPI with incompatible pixel format, we still need -vaapi_device for encoding
+		// but NOT -hwaccel vaapi (which would fail for yuv444p)
+		inputArgs = append(inputArgs, "-vaapi_device", GetVAAPIDevice())
 	}
 
 	// VAAPI: Add -reinit_filter 0 to INPUT args to prevent mid-stream filter reconfiguration.
@@ -238,7 +267,8 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 		// Check if decode outputs frames directly to VAAPI GPU memory.
 		// QSV uses VAAPI decode but without -hwaccel_output_format, so frames
 		// download to CPU. This check ensures correct filter chain selection.
-		framesOnGPU := hasVAAPIOutputFormat(config.hwaccelArgs)
+		// Also force CPU path for incompatible pixel formats (yuv444p, etc.)
+		framesOnGPU := hasVAAPIOutputFormat(config.hwaccelArgs) && !isVAAPIIncompatiblePixFmt(pixFmt)
 
 		// Select output pixel format and color parameters based on source bit depth:
 		// - 8-bit content: nv12 with bt709 color (standard SDR)
