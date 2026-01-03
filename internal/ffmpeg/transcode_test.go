@@ -83,7 +83,7 @@ func TestTranscode(t *testing.T) {
 		close(done)
 	}()
 
-	result, err := transcoder.Transcode(ctx, testFile, outputPath, preset, probeResult.Duration, probeResult.Bitrate, probeResult.SubtitleCodecs, "convert", probeResult.BitDepth, progressCh)
+	result, err := transcoder.Transcode(ctx, testFile, outputPath, preset, probeResult.Duration, probeResult.Bitrate, probeResult.SubtitleCodecs, "convert", probeResult.BitDepth, probeResult.PixFmt, progressCh)
 	<-done
 
 	if err != nil {
