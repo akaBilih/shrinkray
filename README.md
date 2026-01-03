@@ -5,7 +5,7 @@
 > The original project focuses on UI polish, scheduling, and quality controls.
 > This fork focuses on hardware encoding reliability and auth.
 >
-> **Choose the original if you want:** Scheduling, dark mode, quality/CRF sliders, infinite scroll UI
+> **Choose the original if you want:** A simpler click and go experience.
 >
 > **Choose this fork if you need:** VAAPI fixes for Intel Arc/AMD, authentication (OIDC/password), ntfy notifications
 
@@ -13,22 +13,8 @@ A simple video transcoding tool for Unraid. Select a folder, pick a preset, and 
 
 ## Fork Differences
 
-This fork includes fixes and features not in the original:
-
-| Feature | This Fork | Original |
-|---------|-----------|----------|
-| **VAAPI hardware encoding fixes** | ✅ Intel Arc (A380/A770/B580), AMD RDNA | ❌ Known issues |
-| **Authentication** | ✅ Password + OIDC/SSO | ❌ |
-| **ntfy notifications** | ✅ | ❌ |
-| **Pushover notifications** | ✅ | ✅ |
-| **Skip already-encoded files** | ✅ | ✅ |
-| **Scheduling (time restrictions)** | ❌ | ✅ |
-| **Dark mode** | ✅ | ✅ |
-| **Quality/CRF sliders** | ❌ | ✅ |
-| **Infinite scroll queue** | ❌ | ✅ |
-
 If you're running Intel Arc, AMD VAAPI, or need authentication—use this fork.
-If you want scheduling and quality controls—use [the original](https://github.com/gwlsn/shrinkray).
+Otherwise use [the original](https://github.com/gwlsn/shrinkray).
 
 ## Quick Start (Unraid)
 
