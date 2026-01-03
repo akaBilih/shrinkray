@@ -157,9 +157,10 @@ var BasePresets = []struct {
 	{"720p", "Downscale to 720p", "Downscale to 720p (big savings)", CodecHEVC, 720},
 }
 
-// isVAAPIHardwareDecode checks if the hwaccelArgs indicate full VAAPI hardware decode
-// (frames will be in VAAPI memory and need explicit filter to stay on GPU)
-func isVAAPIHardwareDecode(hwaccelArgs []string) bool {
+// hasVAAPIOutputFormat checks if hwaccelArgs specify -hwaccel_output_format vaapi,
+// meaning decoded frames are in VAAPI GPU memory (not downloaded to CPU).
+// This is used to determine whether frames need hwupload or are already on GPU.
+func hasVAAPIOutputFormat(hwaccelArgs []string) bool {
 	for i, arg := range hwaccelArgs {
 		if arg == "-hwaccel_output_format" && i+1 < len(hwaccelArgs) && hwaccelArgs[i+1] == "vaapi" {
 			return true
@@ -202,38 +203,55 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	// Output args
 	outputArgs = []string{}
 
-	// Build video filter for VAAPI and scaling
-	// For VAAPI with hardware decode (-hwaccel_output_format vaapi), we MUST have an
-	// explicit filter to keep frames on VAAPI surfaces. Without this, FFmpeg tries to
-	// auto-insert a software conversion filter (auto_scale) which fails with:
-	// "Impossible to convert between the formats supported by the filter 'Parsed_null_0'
-	// and the filter 'auto_scale_0'"
-	vaapiHwDecode := isVAAPIHardwareDecode(config.hwaccelArgs)
+	// Build video filter based on encoder type and decode mode.
+	// VAAPI encoder requires explicit filter chain to keep frames on GPU and ensure
+	// format compatibility. Without this, FFmpeg auto-inserts software filters that
+	// fail with: "Impossible to convert between the formats supported by the filter
+	// 'Parsed_null_0' and the filter 'auto_scale_0'"
+	if preset.Encoder == HWAccelVAAPI {
+		// Check if decode outputs frames directly to VAAPI GPU memory.
+		// QSV uses VAAPI decode but without -hwaccel_output_format, so frames
+		// download to CPU. This check ensures correct filter chain selection.
+		framesOnGPU := hasVAAPIOutputFormat(config.hwaccelArgs)
 
-	if preset.MaxHeight > 0 {
-		// Scaling requested
+		if preset.MaxHeight > 0 {
+			// Scaling needed
+			if framesOnGPU {
+				// HW decode → frames already on GPU → HW scale
+				outputArgs = append(outputArgs,
+					"-vf", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=nv12", preset.MaxHeight),
+				)
+			} else {
+				// SW/CPU decode → upload to GPU → HW scale
+				outputArgs = append(outputArgs,
+					"-vf", fmt.Sprintf("format=nv12,hwupload,scale_vaapi=w=-2:h='min(ih,%d)':format=nv12", preset.MaxHeight),
+				)
+			}
+		} else {
+			// No scaling needed
+			if framesOnGPU {
+				// HW decode → ensure format compatibility for encoder
+				outputArgs = append(outputArgs,
+					"-vf", "scale_vaapi=format=nv12",
+				)
+			} else {
+				// SW/CPU decode → upload and format for encoder
+				outputArgs = append(outputArgs,
+					"-vf", "format=nv12,hwupload,scale_vaapi=format=nv12",
+				)
+			}
+		}
+	} else if preset.MaxHeight > 0 {
+		// Non-VAAPI paths: QSV, NVENC, Software, VideoToolbox - unchanged
 		scaleFilter := config.scaleFilter
 		if scaleFilter == "" {
 			scaleFilter = "scale"
 		}
-		if vaapiHwDecode {
-			// VAAPI hardware decode: frames are in VAAPI memory, use scale_vaapi with format
-			outputArgs = append(outputArgs,
-				"-vf", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=nv12", preset.MaxHeight),
-			)
-		} else {
-			// Software decode or other hardware: use appropriate scaler
-			outputArgs = append(outputArgs,
-				"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
-			)
-		}
-	} else if vaapiHwDecode {
-		// No scaling, but VAAPI hardware decode still needs explicit filter for format conversion
-		// This prevents FFmpeg from auto-inserting incompatible filter graphs
 		outputArgs = append(outputArgs,
-			"-vf", "scale_vaapi=format=nv12",
+			"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
 		)
 	}
+	// No filter for non-VAAPI paths without scaling (correct)
 
 	// Get quality setting
 	qualityStr := config.quality
