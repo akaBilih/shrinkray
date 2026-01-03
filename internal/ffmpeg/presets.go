@@ -206,8 +206,24 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	// When input color metadata changes (e.g., SEI messages updating color from untagged to bt709),
 	// FFmpeg reconfigures the filter graph and may insert auto_scale between VAAPI filters,
 	// causing "Impossible to convert between formats" error after 40+ minutes.
+	//
+	// Also force input colorspace interpretation to prevent "hwaccel changed" reconfiguration.
+	// When input has untagged/unknown colorspace and FFmpeg discovers bt709 mid-stream via SEI,
+	// it triggers filter graph reconfiguration with "hwaccel changed" even with -reinit_filter 0.
+	// Forcing colorspace tells FFmpeg what to interpret the input as from the start.
 	if preset.Encoder == HWAccelVAAPI {
 		inputArgs = append(inputArgs, "-reinit_filter", "0")
+		// Force input colorspace and range based on bit depth to match output expectations.
+		// This prevents "hwaccel changed" reconfiguration when FFmpeg discovers bt709 mid-stream.
+		// Without this, FFmpeg starts with "csp: unknown range: unknown" and when it detects
+		// bt709/tv from the stream, it triggers filter graph reconfiguration.
+		if bitDepth >= 10 {
+			// 10-bit HDR: bt2020 with PQ transfer, limited range
+			inputArgs = append(inputArgs, "-color_primaries", "bt2020", "-color_trc", "smpte2084", "-colorspace", "bt2020nc", "-color_range", "tv")
+		} else {
+			// 8-bit SDR: bt709, limited range (tv)
+			inputArgs = append(inputArgs, "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv")
+		}
 	}
 
 	// Output args
