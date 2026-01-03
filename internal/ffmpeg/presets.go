@@ -157,6 +157,17 @@ var BasePresets = []struct {
 	{"720p", "Downscale to 720p", "Downscale to 720p (big savings)", CodecHEVC, 720},
 }
 
+// isVAAPIHardwareDecode checks if the hwaccelArgs indicate full VAAPI hardware decode
+// (frames will be in VAAPI memory and need explicit filter to stay on GPU)
+func isVAAPIHardwareDecode(hwaccelArgs []string) bool {
+	for i, arg := range hwaccelArgs {
+		if arg == "-hwaccel_output_format" && i+1 < len(hwaccelArgs) && hwaccelArgs[i+1] == "vaapi" {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildPresetArgs builds FFmpeg arguments for a preset with the specified encoder
 // sourceBitrate is the source video bitrate in bits/second (used for dynamic bitrate calculation)
 // Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
@@ -191,14 +202,36 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	// Output args
 	outputArgs = []string{}
 
-	// Add scaling filter if needed (applies to first video stream)
+	// Build video filter for VAAPI and scaling
+	// For VAAPI with hardware decode (-hwaccel_output_format vaapi), we MUST have an
+	// explicit filter to keep frames on VAAPI surfaces. Without this, FFmpeg tries to
+	// auto-insert a software conversion filter (auto_scale) which fails with:
+	// "Impossible to convert between the formats supported by the filter 'Parsed_null_0'
+	// and the filter 'auto_scale_0'"
+	vaapiHwDecode := isVAAPIHardwareDecode(config.hwaccelArgs)
+
 	if preset.MaxHeight > 0 {
+		// Scaling requested
 		scaleFilter := config.scaleFilter
 		if scaleFilter == "" {
 			scaleFilter = "scale"
 		}
+		if vaapiHwDecode {
+			// VAAPI hardware decode: frames are in VAAPI memory, use scale_vaapi with format
+			outputArgs = append(outputArgs,
+				"-vf", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=nv12", preset.MaxHeight),
+			)
+		} else {
+			// Software decode or other hardware: use appropriate scaler
+			outputArgs = append(outputArgs,
+				"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
+			)
+		}
+	} else if vaapiHwDecode {
+		// No scaling, but VAAPI hardware decode still needs explicit filter for format conversion
+		// This prevents FFmpeg from auto-inserting incompatible filter graphs
 		outputArgs = append(outputArgs,
-			"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
+			"-vf", "scale_vaapi=format=nv12",
 		)
 	}
 
@@ -225,14 +258,16 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 		qualityStr = fmt.Sprintf("%dk", targetKbps)
 	}
 
-	// Stream mapping: map all streams
-	// Use -c:v copy as default for all video streams, then override stream 0
-	// This handles files with embedded cover art (attached pics) which would
-	// fail to encode due to unsupported frame rates (90k fps)
+	// Stream mapping: Use explicit stream selectors to avoid "Multiple -codec/-c... options"
+	// warning. Map first video for transcoding, additional video streams (cover art) with copy,
+	// and all audio/subtitle streams.
 	outputArgs = append(outputArgs,
-		"-map", "0",
-		"-c:v", "copy", // Default: copy all video streams (cover art, etc.)
-		"-c:v:0", config.encoder, // Override: encode only the first video stream
+		"-map", "0:v:0",          // First video stream (for transcoding)
+		"-map", "0:v:1?",         // Second video stream if exists (cover art) - ? means optional
+		"-map", "0:a?",           // All audio streams
+		"-map", "0:s?",           // All subtitle streams
+		"-c:v:0", config.encoder, // Transcode first video stream
+		"-c:v:1", "copy",         // Copy second video stream (cover art) if present
 	)
 
 	// Add quality and encoder-specific args (apply to -c:v:0)

@@ -227,3 +227,210 @@ func containsArgPair(args []string, key, value string) bool {
 
 // TestBuildPresetArgsMuxingQueueSize removed - the -max_muxing_queue_size flag
 // was removed because it caused memory issues with concurrent QSV encoding
+
+// TestBuildPresetArgsVAAPIAV1 verifies VAAPI AV1 encoding generates correct FFmpeg args.
+// This test ensures the fix for the VAAPI filter graph error:
+// - "Impossible to convert between the formats supported by the filter 'Parsed_null_0' and the filter 'auto_scale_0'"
+// The fix requires an explicit -vf filter to keep frames on VAAPI surfaces.
+func TestBuildPresetArgsVAAPIAV1(t *testing.T) {
+	preset := &Preset{
+		ID:        "compress-av1",
+		Name:      "Compress (AV1)",
+		Encoder:   HWAccelVAAPI,
+		Codec:     CodecAV1,
+		MaxHeight: 0, // No scaling
+	}
+
+	inputArgs, outputArgs := BuildPresetArgs(preset, 5000000, nil, "convert")
+
+	// Verify input args contain VAAPI device and hardware acceleration
+	inputArgsStr := strings.Join(inputArgs, " ")
+	t.Logf("VAAPI AV1 input args: %v", inputArgs)
+
+	if !strings.Contains(inputArgsStr, "-vaapi_device") {
+		t.Error("expected -vaapi_device in input args")
+	}
+	if !containsArgPair(inputArgs, "-hwaccel", "vaapi") {
+		t.Error("expected -hwaccel vaapi in input args")
+	}
+	if !containsArgPair(inputArgs, "-hwaccel_output_format", "vaapi") {
+		t.Error("expected -hwaccel_output_format vaapi in input args")
+	}
+
+	// Verify output args
+	outputArgsStr := strings.Join(outputArgs, " ")
+	t.Logf("VAAPI AV1 output args: %v", outputArgs)
+
+	// Must have explicit video filter with scale_vaapi=format=nv12 to prevent auto_scale insertion
+	if !containsArgPair(outputArgs, "-vf", "scale_vaapi=format=nv12") {
+		t.Errorf("expected -vf scale_vaapi=format=nv12 to prevent auto_scale error, got: %s", outputArgsStr)
+	}
+
+	// Must use av1_vaapi encoder
+	if !containsArgPair(outputArgs, "-c:v:0", "av1_vaapi") {
+		t.Errorf("expected -c:v:0 av1_vaapi, got: %s", outputArgsStr)
+	}
+
+	// Must have explicit quality setting (-qp) to avoid "No quality level set" warning
+	if !containsArg(outputArgs, "-qp") {
+		t.Errorf("expected -qp quality flag, got: %s", outputArgsStr)
+	}
+
+	// Verify there's only ONE -c:v:0 option (no duplicate codec warning)
+	codecCount := 0
+	for _, arg := range outputArgs {
+		if arg == "-c:v:0" {
+			codecCount++
+		}
+	}
+	if codecCount != 1 {
+		t.Errorf("expected exactly 1 -c:v:0 option to avoid duplicate codec warning, got %d", codecCount)
+	}
+
+	// Should NOT have -c:v copy (which causes "Multiple -codec options" warning)
+	if containsArgPair(outputArgs, "-c:v", "copy") {
+		t.Errorf("should not have '-c:v copy' which causes duplicate codec warning, got: %s", outputArgsStr)
+	}
+}
+
+// TestBuildPresetArgsVAAPIAV1WithScaling verifies VAAPI AV1 with scaling uses correct filter.
+func TestBuildPresetArgsVAAPIAV1WithScaling(t *testing.T) {
+	preset := &Preset{
+		ID:        "1080p-av1",
+		Name:      "1080p AV1",
+		Encoder:   HWAccelVAAPI,
+		Codec:     CodecAV1,
+		MaxHeight: 1080, // Scale to 1080p
+	}
+
+	_, outputArgs := BuildPresetArgs(preset, 10000000, nil, "convert")
+	outputArgsStr := strings.Join(outputArgs, " ")
+	t.Logf("VAAPI AV1 1080p output args: %v", outputArgs)
+
+	// With scaling, should use scale_vaapi with height and format
+	// Expected format: scale_vaapi=w=-2:h='min(ih,1080)':format=nv12
+	foundCorrectFilter := false
+	for i, arg := range outputArgs {
+		if arg == "-vf" && i+1 < len(outputArgs) {
+			filter := outputArgs[i+1]
+			if strings.Contains(filter, "scale_vaapi") &&
+				strings.Contains(filter, "1080") &&
+				strings.Contains(filter, "format=nv12") {
+				foundCorrectFilter = true
+				t.Logf("Found correct VAAPI scale filter: %s", filter)
+			}
+		}
+	}
+
+	if !foundCorrectFilter {
+		t.Errorf("expected scale_vaapi filter with 1080 and format=nv12, got: %s", outputArgsStr)
+	}
+}
+
+// TestBuildPresetArgsVAAPIHEVC verifies VAAPI HEVC also gets explicit filter.
+func TestBuildPresetArgsVAAPIHEVC(t *testing.T) {
+	preset := &Preset{
+		ID:        "compress-hevc",
+		Name:      "Compress (HEVC)",
+		Encoder:   HWAccelVAAPI,
+		Codec:     CodecHEVC,
+		MaxHeight: 0, // No scaling
+	}
+
+	_, outputArgs := BuildPresetArgs(preset, 5000000, nil, "convert")
+	outputArgsStr := strings.Join(outputArgs, " ")
+	t.Logf("VAAPI HEVC output args: %v", outputArgs)
+
+	// VAAPI HEVC also needs explicit filter
+	if !containsArgPair(outputArgs, "-vf", "scale_vaapi=format=nv12") {
+		t.Errorf("expected -vf scale_vaapi=format=nv12 for VAAPI HEVC, got: %s", outputArgsStr)
+	}
+
+	// Must use hevc_vaapi encoder
+	if !containsArgPair(outputArgs, "-c:v:0", "hevc_vaapi") {
+		t.Errorf("expected -c:v:0 hevc_vaapi, got: %s", outputArgsStr)
+	}
+}
+
+// TestBuildPresetArgsNonVAAPINoExtraFilter verifies non-VAAPI encoders don't get VAAPI filter.
+func TestBuildPresetArgsNonVAAPINoExtraFilter(t *testing.T) {
+	// Software encoder should not have VAAPI filter
+	presetSoftware := &Preset{
+		ID:        "compress-hevc",
+		Name:      "Compress (HEVC)",
+		Encoder:   HWAccelNone,
+		Codec:     CodecHEVC,
+		MaxHeight: 0, // No scaling
+	}
+
+	_, outputArgs := BuildPresetArgs(presetSoftware, 5000000, nil, "convert")
+	outputArgsStr := strings.Join(outputArgs, " ")
+	t.Logf("Software HEVC output args: %v", outputArgs)
+
+	// Software encoder without scaling should have NO -vf at all
+	if containsArg(outputArgs, "-vf") {
+		t.Errorf("software encoder without scaling should not have -vf, got: %s", outputArgsStr)
+	}
+
+	// NVENC encoder also should not have VAAPI filter
+	presetNVENC := &Preset{
+		ID:        "compress-hevc",
+		Name:      "Compress (HEVC)",
+		Encoder:   HWAccelNVENC,
+		Codec:     CodecHEVC,
+		MaxHeight: 0, // No scaling
+	}
+
+	_, outputArgs = BuildPresetArgs(presetNVENC, 5000000, nil, "convert")
+	outputArgsStr = strings.Join(outputArgs, " ")
+	t.Logf("NVENC HEVC output args: %v", outputArgs)
+
+	// NVENC without scaling should have NO -vf
+	if containsArg(outputArgs, "-vf") {
+		t.Errorf("NVENC encoder without scaling should not have -vf, got: %s", outputArgsStr)
+	}
+}
+
+// TestIsVAAPIHardwareDecode tests the helper function.
+func TestIsVAAPIHardwareDecode(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected bool
+	}{
+		{
+			name:     "VAAPI full pipeline",
+			args:     []string{"-vaapi_device", "/dev/dri/renderD128", "-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"},
+			expected: true,
+		},
+		{
+			name:     "VAAPI decode only (no output format)",
+			args:     []string{"-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD128"},
+			expected: false,
+		},
+		{
+			name:     "CUDA/NVENC",
+			args:     []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"},
+			expected: false,
+		},
+		{
+			name:     "No hwaccel",
+			args:     []string{},
+			expected: false,
+		},
+		{
+			name:     "VideoToolbox",
+			args:     []string{"-hwaccel", "videotoolbox"},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isVAAPIHardwareDecode(tc.args)
+			if result != tc.expected {
+				t.Errorf("isVAAPIHardwareDecode(%v) = %v, expected %v", tc.args, result, tc.expected)
+			}
+		})
+	}
+}
