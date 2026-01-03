@@ -1495,6 +1495,23 @@
                 width: 100%;
                 min-width: 0;
             }
+
+            /* Mobile: Stack action buttons and limit section heights */
+            .skipped-list.expanded,
+            .failed-list.expanded {
+                max-height: 250px;
+            }
+
+            .skipped-item-actions,
+            .failed-item-actions {
+                flex-wrap: wrap;
+            }
+
+            .skipped-item-actions .btn,
+            .failed-item-actions .btn {
+                flex: 1 1 auto;
+                min-width: 80px;
+            }
         }
 
         /* Loading State */
@@ -1697,6 +1714,12 @@
             color: var(--accent);
         }
 
+        .completed-header:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
         .completed-title {
             display: flex;
             align-items: center;
@@ -1796,6 +1819,12 @@
             color: var(--accent);
         }
 
+        .skipped-header:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
         .skipped-title {
             display: flex;
             align-items: center;
@@ -1881,13 +1910,13 @@
         }
 
         .skipped-item-badge.skipped {
-            background: rgba(150, 150, 150, 0.15);
-            color: var(--text-secondary);
+            background: rgba(150, 150, 150, 0.25);
+            color: var(--text-primary);
         }
 
         .skipped-item-badge.no-gain {
-            background: rgba(234, 179, 8, 0.15);
-            color: #b45309;
+            background: rgba(234, 179, 8, 0.2);
+            color: #92400e;
         }
 
         /* Failed Section Styles */
@@ -1908,6 +1937,12 @@
 
         .failed-header:hover {
             color: var(--accent);
+        }
+
+        .failed-header:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-radius: 4px;
         }
 
         .failed-title {
@@ -2197,12 +2232,12 @@
                         </div>
                         <!-- Skipped Jobs Section -->
                         <div class="skipped-section" id="skipped-section" style="display: none;">
-                            <div class="skipped-header" onclick="toggleSkippedSection()">
+                            <div class="skipped-header" role="button" tabindex="0" aria-expanded="false" aria-controls="skipped-list" onclick="toggleSkippedSection()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSkippedSection()}">
                                 <div class="skipped-title">
                                     <span>Skipped</span>
                                     <span class="skipped-count" id="skipped-count">0</span>
                                 </div>
-                                <svg class="skipped-toggle" id="skipped-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <svg class="skipped-toggle" id="skipped-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
                             </div>
@@ -2210,12 +2245,12 @@
                         </div>
                         <!-- Failed Jobs Section -->
                         <div class="failed-section" id="failed-section" style="display: none;">
-                            <div class="failed-header" onclick="toggleFailedSection()">
+                            <div class="failed-header" role="button" tabindex="0" aria-expanded="false" aria-controls="failed-list" onclick="toggleFailedSection()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleFailedSection()}">
                                 <div class="failed-title">
                                     <span>Failed</span>
                                     <span class="failed-count" id="failed-count">0</span>
                                 </div>
-                                <svg class="failed-toggle" id="failed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <svg class="failed-toggle" id="failed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
                             </div>
@@ -2223,12 +2258,12 @@
                         </div>
                         <!-- Completed Jobs Section -->
                         <div class="completed-section" id="completed-section" style="display: none;">
-                            <div class="completed-header" onclick="toggleCompletedSection()">
+                            <div class="completed-header" role="button" tabindex="0" aria-expanded="false" aria-controls="completed-list" onclick="toggleCompletedSection()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCompletedSection()}">
                                 <div class="completed-title">
                                     <span>Recently Completed</span>
                                     <span class="completed-count" id="completed-count">0</span>
                                 </div>
-                                <svg class="completed-toggle" id="completed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <svg class="completed-toggle" id="completed-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
                             </div>
@@ -3953,6 +3988,9 @@
         }
 
         async function removeJob(id) {
+            if (!confirm('Remove this job from the queue?')) {
+                return;
+            }
             try {
                 const resp = await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
                 if (!resp.ok) {
@@ -4520,6 +4558,7 @@
         }
 
         function toggleCompletedSection() {
+            const header = document.querySelector('.completed-header');
             const list = document.getElementById('completed-list');
             const toggle = document.getElementById('completed-toggle');
             const isExpanded = list.classList.contains('expanded');
@@ -4527,9 +4566,11 @@
             if (isExpanded) {
                 list.classList.remove('expanded');
                 toggle.classList.remove('expanded');
+                header.setAttribute('aria-expanded', 'false');
             } else {
                 list.classList.add('expanded');
                 toggle.classList.add('expanded');
+                header.setAttribute('aria-expanded', 'true');
             }
         }
 
@@ -4569,6 +4610,7 @@
         }
 
         function toggleSkippedSection() {
+            const header = document.querySelector('.skipped-header');
             const list = document.getElementById('skipped-list');
             const toggle = document.getElementById('skipped-toggle');
             const isExpanded = list.classList.contains('expanded');
@@ -4576,9 +4618,11 @@
             if (isExpanded) {
                 list.classList.remove('expanded');
                 toggle.classList.remove('expanded');
+                header.setAttribute('aria-expanded', 'false');
             } else {
                 list.classList.add('expanded');
                 toggle.classList.add('expanded');
+                header.setAttribute('aria-expanded', 'true');
             }
         }
 
@@ -4612,11 +4656,11 @@
                             <span class="skipped-item-name" title="${escapeHtml(job.input_path)}">${safeFilename}</span>
                             <span class="skipped-item-badge ${badgeClass}">${badgeText}</span>
                         </div>
-                        <div class="skipped-item-reason">${escapeHtml(reason)}</div>
+                        <div class="skipped-item-reason" title="${escapeHtml(reason)}">${escapeHtml(reason)}</div>
                         <div class="skipped-item-actions">
-                            <button class="btn btn-secondary btn-xs" onclick="forceRetryJob('${job.id}')">Force Transcode</button>
-                            <button class="btn btn-secondary btn-xs" onclick="showPresetPicker('${job.id}')">Try Different Preset</button>
-                            <button class="btn btn-secondary btn-xs" onclick="removeJob('${job.id}')">Remove</button>
+                            <button class="btn btn-secondary btn-xs" onclick="forceRetryJob('${job.id}')" aria-label="Force transcode this skipped file">Force Transcode</button>
+                            <button class="btn btn-secondary btn-xs" onclick="showPresetPicker('${job.id}')" aria-label="Try a different preset">Different Preset</button>
+                            <button class="btn btn-danger btn-xs" onclick="removeJob('${job.id}')" aria-label="Remove this job">Remove</button>
                         </div>
                     </div>
                 `;
@@ -4624,6 +4668,7 @@
         }
 
         function toggleFailedSection() {
+            const header = document.querySelector('.failed-header');
             const list = document.getElementById('failed-list');
             const toggle = document.getElementById('failed-toggle');
             const isExpanded = list.classList.contains('expanded');
@@ -4631,9 +4676,11 @@
             if (isExpanded) {
                 list.classList.remove('expanded');
                 toggle.classList.remove('expanded');
+                header.setAttribute('aria-expanded', 'false');
             } else {
                 list.classList.add('expanded');
                 toggle.classList.add('expanded');
+                header.setAttribute('aria-expanded', 'true');
             }
         }
 
@@ -4664,10 +4711,10 @@
                         <div class="failed-item-header">
                             <span class="failed-item-name" title="${escapeHtml(job.input_path)}">${safeFilename}</span>
                         </div>
-                        <div class="failed-item-error">${escapeHtml(error)}</div>
+                        <div class="failed-item-error" title="${escapeHtml(error)}">${escapeHtml(error)}</div>
                         <div class="failed-item-actions">
-                            <button class="btn btn-secondary btn-xs" onclick="retryJob('${job.id}')">Retry</button>
-                            <button class="btn btn-secondary btn-xs" onclick="removeJob('${job.id}')">Remove</button>
+                            <button class="btn btn-secondary btn-xs" onclick="retryJob('${job.id}')" aria-label="Retry this failed job">Retry</button>
+                            <button class="btn btn-danger btn-xs" onclick="removeJob('${job.id}')" aria-label="Remove this job">Remove</button>
                         </div>
                     </div>
                 `;
