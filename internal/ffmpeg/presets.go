@@ -209,47 +209,60 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	// format compatibility. Without this, FFmpeg auto-inserts software filters that
 	// fail with: "Impossible to convert between the formats supported by the filter
 	// 'Parsed_null_0' and the filter 'auto_scale_0'"
+	//
+	// CRITICAL: We must also set explicit color output parameters to prevent mid-stream
+	// filter graph reconfiguration. When input color metadata changes (e.g., SEI messages
+	// updating color from untagged to bt709), FFmpeg reconfigures the filter graph and
+	// may insert auto_scale between VAAPI filters, causing:
+	// "Reconfiguring filter graph because video parameters changed to vaapi(tv, bt709)"
+	// followed by "Impossible to convert between formats" error after 40+ minutes.
 	if preset.Encoder == HWAccelVAAPI {
 		// Check if decode outputs frames directly to VAAPI GPU memory.
 		// QSV uses VAAPI decode but without -hwaccel_output_format, so frames
 		// download to CPU. This check ensures correct filter chain selection.
 		framesOnGPU := hasVAAPIOutputFormat(config.hwaccelArgs)
 
-		// Select output pixel format based on source bit depth:
-		// - 8-bit content: nv12 (standard 8-bit YUV 4:2:0)
-		// - 10-bit content: p010 (10-bit YUV 4:2:0, required for HDR)
+		// Select output pixel format and color parameters based on source bit depth:
+		// - 8-bit content: nv12 with bt709 color (standard SDR)
+		// - 10-bit content: p010 with bt2020 color (required for HDR)
 		// Using wrong format causes mid-encode failures (exit 218) or quality loss.
+		// Explicit color params prevent filter reconfiguration on metadata changes.
 		vaapiFormat := "nv12"
 		swFormat := "nv12" // format filter for software frames before hwupload
+		// Color output params for scale_vaapi to prevent reconfiguration
+		// out_range=tv (limited range), out_color_matrix, out_color_primaries, out_color_transfer
+		colorParams := "out_range=tv:out_color_matrix=bt709:out_color_primaries=bt709:out_color_transfer=bt709"
 		if bitDepth >= 10 {
 			vaapiFormat = "p010"
 			swFormat = "p010le" // little-endian for hwupload compatibility
+			// For 10-bit/HDR content, use bt2020 color space with PQ transfer (HDR10)
+			colorParams = "out_range=tv:out_color_matrix=bt2020nc:out_color_primaries=bt2020:out_color_transfer=smpte2084"
 		}
 
 		if preset.MaxHeight > 0 {
 			// Scaling needed
 			if framesOnGPU {
-				// HW decode → frames already on GPU → HW scale
+				// HW decode → frames already on GPU → HW scale with explicit color handling
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=%s", preset.MaxHeight, vaapiFormat),
+					"-vf", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=%s:%s", preset.MaxHeight, vaapiFormat, colorParams),
 				)
 			} else {
-				// SW/CPU decode → upload to GPU → HW scale
+				// SW/CPU decode → upload to GPU → HW scale with explicit color handling
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("format=%s,hwupload,scale_vaapi=w=-2:h='min(ih,%d)':format=%s", swFormat, preset.MaxHeight, vaapiFormat),
+					"-vf", fmt.Sprintf("format=%s,hwupload,scale_vaapi=w=-2:h='min(ih,%d)':format=%s:%s", swFormat, preset.MaxHeight, vaapiFormat, colorParams),
 				)
 			}
 		} else {
 			// No scaling needed
 			if framesOnGPU {
-				// HW decode → ensure format compatibility for encoder
+				// HW decode → ensure format and color compatibility for encoder
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("scale_vaapi=format=%s", vaapiFormat),
+					"-vf", fmt.Sprintf("scale_vaapi=format=%s:%s", vaapiFormat, colorParams),
 				)
 			} else {
-				// SW/CPU decode → upload and format for encoder
+				// SW/CPU decode → upload and format for encoder with color handling
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("format=%s,hwupload,scale_vaapi=format=%s", swFormat, vaapiFormat),
+					"-vf", fmt.Sprintf("format=%s,hwupload,scale_vaapi=format=%s:%s", swFormat, vaapiFormat, colorParams),
 				)
 			}
 		}
