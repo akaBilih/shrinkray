@@ -287,17 +287,19 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 			colorParams = "out_range=tv:out_color_matrix=bt2020nc:out_color_primaries=bt2020:out_color_transfer=smpte2084"
 		}
 
+		// Use -filter:v:0 instead of -vf to apply filter only to the first video output stream.
+		// This prevents filter from being applied to cover art/attached pictures which are copied.
 		if preset.MaxHeight > 0 {
 			// Scaling needed
 			if framesOnGPU {
 				// HW decode → frames already on GPU → HW scale with explicit color handling
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=%s:%s", preset.MaxHeight, vaapiFormat, colorParams),
+					"-filter:v:0", fmt.Sprintf("scale_vaapi=w=-2:h='min(ih,%d)':format=%s:%s", preset.MaxHeight, vaapiFormat, colorParams),
 				)
 			} else {
 				// SW/CPU decode → upload to GPU → HW scale with explicit color handling
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("format=%s,hwupload,scale_vaapi=w=-2:h='min(ih,%d)':format=%s:%s", swFormat, preset.MaxHeight, vaapiFormat, colorParams),
+					"-filter:v:0", fmt.Sprintf("format=%s,hwupload,scale_vaapi=w=-2:h='min(ih,%d)':format=%s:%s", swFormat, preset.MaxHeight, vaapiFormat, colorParams),
 				)
 			}
 		} else {
@@ -305,23 +307,24 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 			if framesOnGPU {
 				// HW decode → ensure format and color compatibility for encoder
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("scale_vaapi=format=%s:%s", vaapiFormat, colorParams),
+					"-filter:v:0", fmt.Sprintf("scale_vaapi=format=%s:%s", vaapiFormat, colorParams),
 				)
 			} else {
 				// SW/CPU decode → upload and format for encoder with color handling
 				outputArgs = append(outputArgs,
-					"-vf", fmt.Sprintf("format=%s,hwupload,scale_vaapi=format=%s:%s", swFormat, vaapiFormat, colorParams),
+					"-filter:v:0", fmt.Sprintf("format=%s,hwupload,scale_vaapi=format=%s:%s", swFormat, vaapiFormat, colorParams),
 				)
 			}
 		}
 	} else if preset.MaxHeight > 0 {
 		// Non-VAAPI paths: QSV, NVENC, Software, VideoToolbox - unchanged
+		// Use -filter:v:0 to apply filter only to the first video output stream
 		scaleFilter := config.scaleFilter
 		if scaleFilter == "" {
 			scaleFilter = "scale"
 		}
 		outputArgs = append(outputArgs,
-			"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
+			"-filter:v:0", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
 		)
 	}
 	// No filter for non-VAAPI paths without scaling (correct)
@@ -373,9 +376,13 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	// Now add the copy codec for cover art (second video stream if present)
 	outputArgs = append(outputArgs, "-c:v:1", "copy")
 
-	// Copy audio and handle subtitle codecs (convert mov_text if present).
+	// Copy audio and handle subtitle codecs.
 	outputArgs = append(outputArgs, "-c:a", "copy")
 
+	// Handle subtitle codecs based on compatibility:
+	// - mov_text: MP4 subtitle format, convert to srt for MKV output
+	// - Unknown/unsupported (none, empty, webvtt): drop to prevent muxer errors
+	// - Everything else: copy as-is
 	if containsSubtitleCodec(subtitleCodecs, "mov_text") {
 		switch normalizeSubtitleHandling(subtitleHandling) {
 		case SubtitleHandlingDrop:
@@ -383,6 +390,11 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 		default:
 			outputArgs = append(outputArgs, "-c:s", "srt")
 		}
+	} else if hasUnsupportedSubtitleCodec(subtitleCodecs) {
+		// Drop unsupported subtitle streams to prevent muxer errors.
+		// This includes WebVTT (which FFmpeg can't properly parse in MKV) and
+		// unknown codecs that show as empty/none.
+		outputArgs = append(outputArgs, "-sn")
 	} else {
 		outputArgs = append(outputArgs, "-c:s", "copy")
 	}
@@ -393,6 +405,20 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 func containsSubtitleCodec(codecs []string, target string) bool {
 	for _, codec := range codecs {
 		if strings.EqualFold(codec, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasUnsupportedSubtitleCodec checks if any subtitle codec is unsupported for MKV output.
+// Unsupported codecs include:
+// - Empty/none: FFmpeg couldn't parse the codec (e.g., WebVTT in MKV source)
+// - webvtt: WebVTT format which MKV muxer doesn't support
+func hasUnsupportedSubtitleCodec(codecs []string) bool {
+	for _, codec := range codecs {
+		codec = strings.ToLower(strings.TrimSpace(codec))
+		if codec == "" || codec == "none" || codec == "webvtt" {
 			return true
 		}
 	}

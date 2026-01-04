@@ -231,7 +231,7 @@ func containsArgPair(args []string, key, value string) bool {
 // TestBuildPresetArgsVAAPIAV1 verifies VAAPI AV1 encoding generates correct FFmpeg args.
 // This test ensures the fix for the VAAPI filter graph error:
 // - "Impossible to convert between the formats supported by the filter 'Parsed_null_0' and the filter 'auto_scale_0'"
-// The fix requires an explicit -vf filter to keep frames on VAAPI surfaces.
+// The fix requires an explicit -filter:v:0 filter to keep frames on VAAPI surfaces.
 func TestBuildPresetArgsVAAPIAV1(t *testing.T) {
 	preset := &Preset{
 		ID:        "compress-av1",
@@ -265,7 +265,7 @@ func TestBuildPresetArgsVAAPIAV1(t *testing.T) {
 	// to prevent auto_scale insertion during mid-stream color metadata changes
 	foundVAAPIFilter := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			// Check for scale_vaapi with format=nv12 and color output params
 			if strings.Contains(filter, "scale_vaapi") &&
@@ -277,7 +277,7 @@ func TestBuildPresetArgsVAAPIAV1(t *testing.T) {
 		}
 	}
 	if !foundVAAPIFilter {
-		t.Errorf("expected -vf scale_vaapi with format=nv12 and out_color_matrix=bt709, got: %s", outputArgsStr)
+		t.Errorf("expected -filter:v:0 scale_vaapi with format=nv12 and out_color_matrix=bt709, got: %s", outputArgsStr)
 	}
 
 	// Must use av1_vaapi encoder
@@ -325,7 +325,7 @@ func TestBuildPresetArgsVAAPIAV1WithScaling(t *testing.T) {
 	// Expected format: scale_vaapi=w=-2:h='min(ih,1080)':format=nv12:out_range=tv:out_color_matrix=bt709:...
 	foundCorrectFilter := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "1080") &&
@@ -359,7 +359,7 @@ func TestBuildPresetArgsVAAPIHEVC(t *testing.T) {
 	// VAAPI HEVC also needs explicit filter with color params
 	foundVAAPIFilter := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "format=nv12") &&
@@ -369,7 +369,7 @@ func TestBuildPresetArgsVAAPIHEVC(t *testing.T) {
 		}
 	}
 	if !foundVAAPIFilter {
-		t.Errorf("expected -vf scale_vaapi with format=nv12 and out_color_matrix=bt709 for VAAPI HEVC, got: %s", outputArgsStr)
+		t.Errorf("expected -filter:v:0 scale_vaapi with format=nv12 and out_color_matrix=bt709 for VAAPI HEVC, got: %s", outputArgsStr)
 	}
 
 	// Must use hevc_vaapi encoder
@@ -393,8 +393,8 @@ func TestBuildPresetArgsNonVAAPINoExtraFilter(t *testing.T) {
 	outputArgsStr := strings.Join(outputArgs, " ")
 	t.Logf("Software HEVC output args: %v", outputArgs)
 
-	// Software encoder without scaling should have NO -vf at all
-	if containsArg(outputArgs, "-vf") {
+	// Software encoder without scaling should have NO -filter:v:0 at all
+	if containsArg(outputArgs, "-filter:v:0") {
 		t.Errorf("software encoder without scaling should not have -vf, got: %s", outputArgsStr)
 	}
 
@@ -412,7 +412,7 @@ func TestBuildPresetArgsNonVAAPINoExtraFilter(t *testing.T) {
 	t.Logf("NVENC HEVC output args: %v", outputArgs)
 
 	// NVENC without scaling should have NO -vf
-	if containsArg(outputArgs, "-vf") {
+	if containsArg(outputArgs, "-filter:v:0") {
 		t.Errorf("NVENC encoder without scaling should not have -vf, got: %s", outputArgsStr)
 	}
 }
@@ -495,7 +495,7 @@ func TestBuildPresetArgsVAAPI10Bit(t *testing.T) {
 	// 10-bit content should use p010 format with bt2020 color params
 	found10bit := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "format=p010") &&
@@ -516,7 +516,7 @@ func TestBuildPresetArgsVAAPI10Bit(t *testing.T) {
 
 	found12bit := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "format=p010") &&
@@ -571,17 +571,17 @@ func TestBuildPresetArgsVAAPIPreventReconfiguration(t *testing.T) {
 		t.Errorf("expected -color_range tv in INPUT args for 8-bit content, got: %s", inputArgsStr)
 	}
 
-	// Find the -vf argument
+	// Find the -filter:v:0 argument
 	var filter string
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter = outputArgs[i+1]
 			break
 		}
 	}
 
 	if filter == "" {
-		t.Fatal("expected -vf argument but none found")
+		t.Fatal("expected -filter:v:0 argument but none found")
 	}
 
 	t.Logf("Filter: %s", filter)
@@ -650,7 +650,7 @@ func TestBuildPresetArgsVAAPI10BitWithScaling(t *testing.T) {
 	// Should have scale_vaapi with 1080 height, p010 format, and bt2020 color params
 	foundCorrectFilter := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "scale_vaapi") &&
 				strings.Contains(filter, "1080") &&
@@ -705,7 +705,7 @@ func TestBuildPresetArgsVAAPI444pSoftwareDecode(t *testing.T) {
 	// format=nv12,hwupload,scale_vaapi=...
 	foundCorrectFilter := false
 	for i, arg := range outputArgs {
-		if arg == "-vf" && i+1 < len(outputArgs) {
+		if arg == "-filter:v:0" && i+1 < len(outputArgs) {
 			filter := outputArgs[i+1]
 			if strings.Contains(filter, "format=nv12") &&
 				strings.Contains(filter, "hwupload") &&
