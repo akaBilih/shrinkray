@@ -572,10 +572,14 @@ func (q *Queue) AddSoftwareFallback(originalJob *Job, fallbackReason string) *Jo
 		InputSize:          originalJob.InputSize,
 		Duration:           originalJob.Duration,
 		Bitrate:            originalJob.Bitrate,
+		BitDepth:           originalJob.BitDepth,
+		PixFmt:             originalJob.PixFmt,
+		SubtitleCodecs:     originalJob.SubtitleCodecs,
 		CreatedAt:          time.Now(),
 		IsSoftwareFallback: true,
 		OriginalJobID:      originalJob.ID,
 		FallbackReason:     fallbackReason,
+		HardwarePath:       "cpu→cpu", // Explicit: software decode and encode
 	}
 
 	q.jobs[job.ID] = job
@@ -630,7 +634,8 @@ func (q *Queue) GetNext() *Job {
 
 // StartJob marks a job as running.
 // Accepts jobs in pending or pending_probe status.
-func (q *Queue) StartJob(id string, tempPath string) error {
+// hardwarePath describes the decode→encode pipeline (e.g., "vaapi→vaapi", "cpu→vaapi")
+func (q *Queue) StartJob(id string, tempPath string, hardwarePath string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -645,6 +650,7 @@ func (q *Queue) StartJob(id string, tempPath string) error {
 
 	job.Status = StatusRunning
 	job.TempPath = tempPath
+	job.HardwarePath = hardwarePath
 	job.StartedAt = time.Now()
 
 	if err := q.save(); err != nil {
@@ -843,9 +849,10 @@ func (q *Queue) recordProcessedPathLocked(inputPath string, completedAt time.Tim
 
 // FailJobDetails contains optional diagnostic information for failed jobs
 type FailJobDetails struct {
-	Stderr     string   // Bounded stderr output from ffmpeg
-	ExitCode   int      // FFmpeg exit code
-	FFmpegArgs []string // FFmpeg command arguments used
+	Stderr         string   // Bounded stderr output from ffmpeg
+	ExitCode       int      // FFmpeg exit code
+	FFmpegArgs     []string // FFmpeg command arguments used
+	FallbackReason string   // User-visible suggestion when fallback is disabled
 }
 
 // FailJob marks a job as failed
@@ -873,6 +880,9 @@ func (q *Queue) FailJobWithDetails(id string, errMsg string, details *FailJobDet
 		job.Stderr = details.Stderr
 		job.ExitCode = details.ExitCode
 		job.FFmpegArgs = details.FFmpegArgs
+		if details.FallbackReason != "" {
+			job.FallbackReason = details.FallbackReason
+		}
 	}
 
 	if err := q.save(); err != nil {

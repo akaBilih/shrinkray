@@ -124,8 +124,22 @@ Access via the gear icon in the WebUI:
 
 - **Original files**: Delete after transcode, or keep as `.old`
 - **Concurrent jobs**: 1-6 simultaneous transcodes
+- **Allow CPU encode fallback**: Retry failed GPU encodes with CPU (off by default)
 - **Pushover notifications**: Get notified when all jobs complete
 - **ntfy notifications**: Send notifications to an ntfy topic
+
+### CPU Encode Fallback
+
+By default, if a GPU encode fails, the job fails with a clear error message. This is intentional—on systems with working VAAPI (Intel Arc, AMD), GPU encodes should succeed. A failure usually indicates a configuration problem that should be fixed.
+
+Enable **"Allow CPU encode fallback"** only if:
+- A small number of files fail due to unusual codecs or formats
+- You want those files transcoded anyway, even if slower
+- You've verified your GPU is working correctly for other files
+
+When enabled, failed GPU encodes automatically retry with CPU encoding (slower but more compatible). The job status will show "Retrying with CPU encode" so you know what happened.
+
+**Unraid + Intel Arc users**: Keep this OFF. If encodes are failing, check your VAAPI setup first (see Troubleshooting VAAPI section).
 
 ## Pushover Notifications
 
@@ -161,6 +175,7 @@ Config is stored in `/config/shrinkray.yaml`. Most settings are available in the
 | `ntfy_server` | `https://ntfy.sh` | ntfy server URL for notifications |
 | `ntfy_topic` | *(empty)* | ntfy topic for notifications |
 | `ntfy_token` | *(empty)* | ntfy access token (optional) |
+| `allow_software_fallback` | `false` | Retry failed GPU encodes with CPU (see CPU Encode Fallback) |
 | `auth.enabled` | `false` | Require authentication |
 | `auth.provider` | `noop` | Auth provider name (`noop`, `password`) |
 | `auth.secret` | *(empty)* | HMAC secret used to sign session cookies |
@@ -218,6 +233,10 @@ auth:
 Environment overrides:
 
 ```bash
+# Enable CPU fallback for edge-case files
+SHRINKRAY_ALLOW_SOFTWARE_FALLBACK=true
+
+# Authentication
 SHRINKRAY_AUTH_ENABLED=1
 SHRINKRAY_AUTH_PROVIDER=password
 SHRINKRAY_AUTH_SECRET=change-me
@@ -256,6 +275,46 @@ go build -o shrinkray ./cmd/shrinkray
 ```
 
 Requires Go 1.22+ and FFmpeg with HEVC/AV1 support.
+
+## Testing
+
+### Go Unit Tests
+
+```bash
+go test ./...
+```
+
+### E2E Tests (Playwright)
+
+End-to-end tests verify the web UI works correctly across browsers.
+
+```bash
+# Install dependencies
+npm install
+npx playwright install
+
+# Run tests (requires running server)
+./shrinkray -media /tmp/test-media &
+npm test
+
+# Run with UI (interactive)
+npm run test:ui
+
+# Run headed (see browser)
+npm run test:headed
+
+# View test report
+npm run test:report
+```
+
+**Test suites:**
+- `navigation.spec.ts` - Layout, navigation, keyboard access
+- `file-browser.spec.ts` - File/folder browsing
+- `presets.spec.ts` - Preset selection, help modal
+- `job-queue.spec.ts` - Job display, progress, cancellation
+- `settings.spec.ts` - Settings panel, toggles
+- `sse-streaming.spec.ts` - Real-time updates
+- `accessibility.spec.ts` - A11y checks
 
 ## Docker Image Publishing
 

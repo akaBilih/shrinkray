@@ -151,10 +151,10 @@ var BasePresets = []struct {
 	Codec       Codec
 	MaxHeight   int
 }{
-	{"compress-hevc", "Compress (HEVC)", "Reduce size with HEVC encoding", CodecHEVC, 0},
-	{"compress-av1", "Compress (AV1)", "Maximum compression with AV1 encoding", CodecAV1, 0},
-	{"1080p", "Downscale to 1080p", "Downscale to 1080p max (HEVC)", CodecHEVC, 1080},
-	{"720p", "Downscale to 720p", "Downscale to 720p (big savings)", CodecHEVC, 720},
+	{"compress-hevc", "Smaller files — HEVC", "Widely compatible, works almost everywhere", CodecHEVC, 0},
+	{"compress-av1", "Smaller files — AV1", "Best quality per MB, newer devices", CodecAV1, 0},
+	{"1080p", "Reduce to 1080p — HEVC", "Downscale to Full HD for big savings", CodecHEVC, 1080},
+	{"720p", "Reduce to 720p — HEVC", "Maximum compatibility, smallest files", CodecHEVC, 720},
 }
 
 // hasVAAPIOutputFormat checks if hwaccelArgs specify -hwaccel_output_format vaapi,
@@ -484,4 +484,50 @@ func ListPresets() []*Preset {
 	}
 
 	return result
+}
+
+// GetHardwarePath returns a human-readable string describing the decode→encode pipeline.
+// Examples: "vaapi→vaapi", "cpu→vaapi", "cpu→cpu", "cuda→nvenc", "vaapi→qsv"
+// This reflects the actual hwaccelArgs configuration in encoderConfigs.
+func GetHardwarePath(encoder HWAccel, pixFmt string) string {
+	// Determine decode method based on actual hwaccel configuration
+	// See encoderConfigs for the hwaccelArgs used by each encoder
+	var decode string
+	switch encoder {
+	case HWAccelVAAPI:
+		// VAAPI uses -hwaccel vaapi, but falls back to CPU for incompatible formats
+		if isVAAPIIncompatiblePixFmt(pixFmt) {
+			decode = "cpu"
+		} else {
+			decode = "vaapi"
+		}
+	case HWAccelNVENC:
+		// NVENC uses -hwaccel cuda for decode
+		decode = "cuda"
+	case HWAccelQSV:
+		// QSV uses -hwaccel vaapi for decode (see comment: "VAAPI decode with CPU frame transfer")
+		decode = "vaapi"
+	case HWAccelVideoToolbox:
+		// VideoToolbox uses -hwaccel videotoolbox for decode
+		decode = "videotoolbox"
+	default:
+		decode = "cpu"
+	}
+
+	// Determine encode method
+	var encode string
+	switch encoder {
+	case HWAccelVAAPI:
+		encode = "vaapi"
+	case HWAccelNVENC:
+		encode = "nvenc"
+	case HWAccelQSV:
+		encode = "qsv"
+	case HWAccelVideoToolbox:
+		encode = "videotoolbox"
+	default:
+		encode = "cpu"
+	}
+
+	return decode + "→" + encode
 }
