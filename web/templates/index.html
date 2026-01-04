@@ -4440,6 +4440,13 @@
                     if (job.status === 'failed') cachedStats.failed++;
                     updateStats(cachedStats);
                 }
+            } else {
+                // Job not in cache (e.g., page loaded after job started) - add it
+                cachedJobs.push(job);
+                ensureLocalStartedAt(job, getStartedAtMs(job));
+                if (virtualScrollEnabled) {
+                    addJobToVirtualState(job);
+                }
             }
 
             if (job.status !== 'failed') {
@@ -5328,6 +5335,7 @@
             eventSource = new EventSource('/api/jobs/stream');
 
             eventSource.onmessage = (event) => {
+                try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'init') {
                     updateJobs(data.jobs);
@@ -5390,6 +5398,9 @@
                 } else {
                     // Fallback: debounced full refresh for unknown event types
                     debouncedRefreshJobs();
+                }
+                } catch (err) {
+                    console.error('SSE message handler error:', err);
                 }
             };
 
