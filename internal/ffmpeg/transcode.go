@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -144,6 +146,78 @@ func scanCRLF(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		return len(data), data, nil
 	}
 	return 0, nil, nil
+}
+
+// IsVAAPIFormatError checks if the error is specifically a VAAPI pixel format
+// compatibility issue (exit code 218 or format mismatch errors).
+func (e *TranscodeError) IsVAAPIFormatError() bool {
+	stderr := strings.ToLower(e.Stderr)
+
+	// Exit code 218 often indicates VAAPI format issues
+	if e.ExitCode == 218 {
+		return true
+	}
+
+	// Known VAAPI format-related error patterns
+	formatPatterns := []string{
+		"impossible to convert between the formats",
+		"auto_scale",
+		"format not supported",
+		"vaapi surface format",
+		"hwupload",
+	}
+
+	for _, pattern := range formatPatterns {
+		if strings.Contains(stderr, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// DiagnoseVAAPIError provides detailed diagnostic information for VAAPI failures.
+// Returns a human-readable diagnosis and suggested fixes.
+func (e *TranscodeError) DiagnoseVAAPIError() (diagnosis string, suggestions []string) {
+	stderr := strings.ToLower(e.Stderr)
+
+	// Exit code 218 - usually format mismatch
+	if e.ExitCode == 218 {
+		diagnosis = "VAAPI encoding failed mid-stream (exit 218) - likely pixel format mismatch"
+		suggestions = append(suggestions, "10-bit content may require p010 format instead of nv12")
+		suggestions = append(suggestions, "Check if source is HDR/10-bit content")
+		return
+	}
+
+	// Filter graph errors
+	if strings.Contains(stderr, "impossible to convert between the formats") {
+		diagnosis = "VAAPI filter graph format incompatibility"
+		suggestions = append(suggestions, "Explicit scale_vaapi filter with format= is required")
+		suggestions = append(suggestions, "Frames must stay in VAAPI memory throughout the pipeline")
+		return
+	}
+
+	// Device access errors
+	if strings.Contains(stderr, "cannot open drm render node") ||
+		strings.Contains(stderr, "permission denied") {
+		diagnosis = "Cannot access VAAPI device"
+		suggestions = append(suggestions, "Ensure /dev/dri is passed to container: --device=/dev/dri")
+		suggestions = append(suggestions, "Add container user to 'render' group")
+		return
+	}
+
+	// Driver initialization errors
+	if strings.Contains(stderr, "vainitialize failed") ||
+		strings.Contains(stderr, "failed to initialise vaapi") {
+		diagnosis = "VAAPI driver initialization failed"
+		suggestions = append(suggestions, "Install intel-media-driver for Intel Arc GPUs")
+		suggestions = append(suggestions, "Set LIBVA_DRIVER_NAME=iHD for Intel Arc")
+		return
+	}
+
+	diagnosis = "Unknown VAAPI error"
+	suggestions = append(suggestions, "Check ffmpeg stderr for details")
+	return
 }
 
 // IsHardwareEncoderFailure checks if the error indicates a hardware encoder failure
@@ -281,6 +355,11 @@ func (b *boundedBuffer) String() string {
 // Transcoder wraps ffmpeg transcoding functionality
 type Transcoder struct {
 	ffmpegPath string
+
+	// Process control for pause/resume
+	mu      sync.Mutex
+	process *os.Process
+	paused  bool
 }
 
 // NewTranscoder creates a new Transcoder with the given ffmpeg path
@@ -288,9 +367,58 @@ func NewTranscoder(ffmpegPath string) *Transcoder {
 	return &Transcoder{ffmpegPath: ffmpegPath}
 }
 
+// Pause sends SIGSTOP to the ffmpeg process to pause transcoding.
+// Returns true if the process was paused, false if there's no process running.
+func (t *Transcoder) Pause() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.process == nil || t.paused {
+		return false
+	}
+
+	if err := t.process.Signal(syscall.SIGSTOP); err != nil {
+		log.Printf("[transcode] Failed to pause process: %v", err)
+		return false
+	}
+
+	t.paused = true
+	log.Printf("[transcode] Process paused (PID %d)", t.process.Pid)
+	return true
+}
+
+// Resume sends SIGCONT to the ffmpeg process to resume transcoding.
+// Returns true if the process was resumed, false if there's no process paused.
+func (t *Transcoder) Resume() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.process == nil || !t.paused {
+		return false
+	}
+
+	if err := t.process.Signal(syscall.SIGCONT); err != nil {
+		log.Printf("[transcode] Failed to resume process: %v", err)
+		return false
+	}
+
+	t.paused = false
+	log.Printf("[transcode] Process resumed (PID %d)", t.process.Pid)
+	return true
+}
+
+// IsPaused returns true if the transcoder is currently paused
+func (t *Transcoder) IsPaused() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.paused
+}
+
 // Transcode transcodes a video file using the given preset
 // It sends progress updates to the progress channel and returns the result
 // sourceBitrate is the source video bitrate in bits/second (for dynamic bitrate calculation)
+// bitDepth is the source video bit depth (8, 10, 12) - used for VAAPI format selection
+// pixFmt is the source pixel format (e.g., yuv420p, yuv444p) - used to detect unsupported formats
 func (t *Transcoder) Transcode(
 	ctx context.Context,
 	inputPath string,
@@ -300,6 +428,8 @@ func (t *Transcoder) Transcode(
 	sourceBitrate int64,
 	subtitleCodecs []string,
 	subtitleHandling string,
+	bitDepth int,
+	pixFmt string,
 	progressCh chan<- Progress,
 ) (*TranscodeResult, error) {
 	startTime := time.Now()
@@ -313,12 +443,31 @@ func (t *Transcoder) Transcode(
 
 	// Build preset args with source bitrate for dynamic calculation
 	// inputArgs go before -i (hwaccel), outputArgs go after
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, subtitleCodecs, subtitleHandling)
+	// bitDepth determines pixel format: nv12 for 8-bit, p010 for 10-bit+
+	// pixFmt determines if special handling is needed (e.g., yuv444p needs software decode)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, subtitleCodecs, subtitleHandling, bitDepth, pixFmt)
 
 	// Build ffmpeg command
-	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output
+	// Structure: ffmpeg [inputArgs] -f format -i input [outputArgs] output
 	args := []string{}
 	args = append(args, inputArgs...)
+
+	// Force format detection for container files to prevent misdetection
+	// FFmpeg sometimes misdetects MKV files as EAC3 audio when probing fails
+	ext := strings.ToLower(filepath.Ext(inputPath))
+	switch ext {
+	case ".mkv", ".mka", ".mks":
+		args = append(args, "-f", "matroska")
+	case ".mp4", ".m4v", ".m4a":
+		args = append(args, "-f", "mp4")
+	case ".avi":
+		args = append(args, "-f", "avi")
+	case ".mov":
+		args = append(args, "-f", "mov")
+	case ".ts", ".m2ts", ".mts":
+		args = append(args, "-f", "mpegts")
+	}
+
 	args = append(args,
 		"-i", inputPath,
 		"-y",                  // Overwrite output without asking
@@ -349,6 +498,20 @@ func (t *Transcoder) Transcode(
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start ffmpeg: %w", err)
 	}
+
+	// Store process reference for pause/resume
+	t.mu.Lock()
+	t.process = cmd.Process
+	t.paused = false
+	t.mu.Unlock()
+
+	// Ensure we clear the process reference when done
+	defer func() {
+		t.mu.Lock()
+		t.process = nil
+		t.paused = false
+		t.mu.Unlock()
+	}()
 
 	// Parse progress from stdout
 	go func() {

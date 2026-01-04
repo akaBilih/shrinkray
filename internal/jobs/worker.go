@@ -123,6 +123,51 @@ func (p *WorkerPool) CancelJob(jobID string) bool {
 	return false
 }
 
+// PauseJob pauses a specific job if it's currently running
+func (p *WorkerPool) PauseJob(jobID string) bool {
+	p.mu.Lock()
+	workers := make([]*Worker, len(p.workers))
+	copy(workers, p.workers)
+	p.mu.Unlock()
+
+	for _, w := range workers {
+		if w.PauseCurrentJob(jobID) {
+			return true
+		}
+	}
+	return false
+}
+
+// ResumeJob resumes a specific job if it's currently paused
+func (p *WorkerPool) ResumeJob(jobID string) bool {
+	p.mu.Lock()
+	workers := make([]*Worker, len(p.workers))
+	copy(workers, p.workers)
+	p.mu.Unlock()
+
+	for _, w := range workers {
+		if w.ResumeCurrentJob(jobID) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsJobPaused returns true if a specific job is currently paused
+func (p *WorkerPool) IsJobPaused(jobID string) bool {
+	p.mu.Lock()
+	workers := make([]*Worker, len(p.workers))
+	copy(workers, p.workers)
+	p.mu.Unlock()
+
+	for _, w := range workers {
+		if w.IsCurrentJobPaused(jobID) {
+			return true
+		}
+	}
+	return false
+}
+
 // Resize changes the number of workers in the pool
 // If n > current, new workers are started immediately
 // If n < current, excess workers are stopped immediately
@@ -326,8 +371,11 @@ func (w *Worker) processJob(job *Job) {
 	tempDir := w.cfg.GetTempDir(job.InputPath)
 	tempPath := ffmpeg.BuildTempPath(job.InputPath, tempDir)
 
+	// Determine the hardware path (decode→encode pipeline)
+	hardwarePath := ffmpeg.GetHardwarePath(preset.Encoder, job.PixFmt)
+
 	// Mark job as started
-	if err := w.queue.StartJob(job.ID, tempPath); err != nil {
+	if err := w.queue.StartJob(job.ID, tempPath, hardwarePath); err != nil {
 		// Job might have been cancelled or already started
 		return
 	}
@@ -345,7 +393,7 @@ func (w *Worker) processJob(job *Job) {
 
 	// Run the transcode
 	duration := time.Duration(job.Duration) * time.Millisecond
-	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.SubtitleCodecs, w.cfg.SubtitleHandling, progressCh)
+	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.SubtitleCodecs, w.cfg.SubtitleHandling, job.BitDepth, job.PixFmt, progressCh)
 
 	if err != nil {
 		// Check if it was cancelled
@@ -361,24 +409,33 @@ func (w *Worker) processJob(job *Job) {
 
 		// Check if we have detailed error info from the transcoder
 		if te, ok := err.(*ffmpeg.TranscodeError); ok {
-			// Check if this is a hardware encoder failure that should trigger
-			// automatic software fallback. Only fallback if:
-			// 1. This job was using hardware encoding
-			// 2. This is not already a software fallback (prevent infinite retry)
-			// 3. The error pattern indicates a hardware-specific failure
+			// Check if this is a hardware encoder failure
 			if job.IsHardware && !job.IsSoftwareFallback && te.IsHardwareEncoderFailure() {
-				// Create a software fallback job
-				fallbackJob := w.queue.AddSoftwareFallback(job, "Hardware encoder failed, retrying with software")
-				if fallbackJob != nil {
-					// Mark original job as failed but note the auto-retry
-					w.queue.FailJobWithDetails(job.ID, te.Message+" (auto-retrying with software encoder)", &FailJobDetails{
-						Stderr:     te.Stderr,
-						ExitCode:   te.ExitCode,
-						FFmpegArgs: te.Args,
+				// Only attempt software fallback if explicitly enabled in config
+				if w.cfg.AllowSoftwareFallback {
+					// Create a software fallback job
+					fallbackJob := w.queue.AddSoftwareFallback(job, "GPU encode failed, retried with CPU encode")
+					if fallbackJob != nil {
+						// Mark original job as failed but note the auto-retry
+						w.queue.FailJobWithDetails(job.ID, te.Message+" (auto-retrying with CPU encoder)", &FailJobDetails{
+							Stderr:     te.Stderr,
+							ExitCode:   te.ExitCode,
+							FFmpegArgs: te.Args,
+						})
+						return
+					}
+					// Fallback creation failed (rate limited), fall through to normal failure
+				} else {
+					// Software fallback disabled - fail with clear message and guidance
+					failureMsg := te.Message + " (GPU encode failed and CPU fallback is disabled)"
+					w.queue.FailJobWithDetails(job.ID, failureMsg, &FailJobDetails{
+						Stderr:         te.Stderr,
+						ExitCode:       te.ExitCode,
+						FFmpegArgs:     te.Args,
+						FallbackReason: "Enable 'Allow CPU encode fallback' in Settings to retry on CPU",
 					})
 					return
 				}
-				// Fallback creation failed, fall through to normal failure handling
 			}
 
 			w.queue.FailJobWithDetails(job.ID, te.Message, &FailJobDetails{
@@ -392,11 +449,11 @@ func (w *Worker) processJob(job *Job) {
 		return
 	}
 
-	// Check if transcoded file is larger than original
-	if result.OutputSize >= job.InputSize {
-		// Delete the temp file and fail the job
+	// Check if transcoded file is larger than original (unless force transcode is enabled)
+	if result.OutputSize >= job.InputSize && !job.ForceTranscode {
+		// Delete the temp file and mark as no_gain
 		os.Remove(tempPath)
-		w.queue.FailJob(job.ID, fmt.Sprintf("Transcoded file (%s) is larger than original (%s). File skipped.",
+		w.queue.NoGainJob(job.ID, fmt.Sprintf("Transcoded file (%s) is larger than original (%s). File skipped.",
 			formatBytes(result.OutputSize), formatBytes(job.InputSize)))
 		return
 	}
@@ -430,6 +487,39 @@ func (w *Worker) CancelCurrentJob(jobID string) bool {
 	if w.currentJob != nil && w.currentJob.ID == jobID && w.jobCancel != nil {
 		w.jobCancel()
 		return true
+	}
+	return false
+}
+
+// PauseCurrentJob pauses the job if it matches the given ID
+func (w *Worker) PauseCurrentJob(jobID string) bool {
+	w.currentJobMu.Lock()
+	defer w.currentJobMu.Unlock()
+
+	if w.currentJob != nil && w.currentJob.ID == jobID {
+		return w.transcoder.Pause()
+	}
+	return false
+}
+
+// ResumeCurrentJob resumes the job if it matches the given ID
+func (w *Worker) ResumeCurrentJob(jobID string) bool {
+	w.currentJobMu.Lock()
+	defer w.currentJobMu.Unlock()
+
+	if w.currentJob != nil && w.currentJob.ID == jobID {
+		return w.transcoder.Resume()
+	}
+	return false
+}
+
+// IsCurrentJobPaused returns true if the current job is paused
+func (w *Worker) IsCurrentJobPaused(jobID string) bool {
+	w.currentJobMu.Lock()
+	defer w.currentJobMu.Unlock()
+
+	if w.currentJob != nil && w.currentJob.ID == jobID {
+		return w.transcoder.IsPaused()
 	}
 	return false
 }

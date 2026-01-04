@@ -438,6 +438,58 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
+// PauseJob handles POST /api/jobs/:id/pause
+func (h *Handler) PauseJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	job := h.queue.Get(id)
+	if job == nil {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+
+	if job.Status != jobs.StatusRunning {
+		writeError(w, http.StatusConflict, "job is not running")
+		return
+	}
+
+	if h.workerPool.PauseJob(id) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "paused"})
+	} else {
+		writeError(w, http.StatusConflict, "failed to pause job")
+	}
+}
+
+// ResumeJob handles POST /api/jobs/:id/resume
+func (h *Handler) ResumeJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	job := h.queue.Get(id)
+	if job == nil {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+
+	if job.Status != jobs.StatusRunning {
+		writeError(w, http.StatusConflict, "job is not running")
+		return
+	}
+
+	if h.workerPool.ResumeJob(id) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "resumed"})
+	} else {
+		writeError(w, http.StatusConflict, "failed to resume job")
+	}
+}
+
 // ReorderJob handles POST /api/jobs/:id/reorder
 func (h *Handler) ReorderJob(w http.ResponseWriter, r *http.Request) {
 	type reorderJobRequest struct {
@@ -571,9 +623,10 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"ntfy_topic":          h.cfg.NtfyTopic,
 		"ntfy_token":          h.cfg.NtfyToken,
 		"ntfy_configured":     h.ntfy.IsConfigured(),
-		"notify_on_complete":  h.cfg.NotifyOnComplete,
-		"hide_processing_tmp": h.cfg.HideProcessingTmp,
-		"auth_enabled":        h.cfg.Auth.Enabled,
+		"notify_on_complete":      h.cfg.NotifyOnComplete,
+		"hide_processing_tmp":     h.cfg.HideProcessingTmp,
+		"allow_software_fallback": h.cfg.AllowSoftwareFallback,
+		"auth_enabled":            h.cfg.Auth.Enabled,
 		"auth_provider":       h.cfg.Auth.Provider,
 		// Feature flags for frontend
 		"features": map[string]bool{
@@ -596,8 +649,9 @@ type UpdateConfigRequest struct {
 	NtfyServer        *string `json:"ntfy_server,omitempty"`
 	NtfyTopic         *string `json:"ntfy_topic,omitempty"`
 	NtfyToken         *string `json:"ntfy_token,omitempty"`
-	NotifyOnComplete  *bool   `json:"notify_on_complete,omitempty"`
-	HideProcessingTmp *bool   `json:"hide_processing_tmp,omitempty"`
+	NotifyOnComplete      *bool `json:"notify_on_complete,omitempty"`
+	HideProcessingTmp     *bool `json:"hide_processing_tmp,omitempty"`
+	AllowSoftwareFallback *bool `json:"allow_software_fallback,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -660,6 +714,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if req.HideProcessingTmp != nil {
 		h.cfg.HideProcessingTmp = *req.HideProcessingTmp
 		h.browser.SetHideProcessingTmp(*req.HideProcessingTmp)
+	}
+	if req.AllowSoftwareFallback != nil {
+		h.cfg.AllowSoftwareFallback = *req.AllowSoftwareFallback
 	}
 
 	// Persist config to disk
@@ -748,6 +805,7 @@ func (h *Handler) ApplyConfig(newCfg *config.Config) {
 	h.cfg.NtfyToken = newCfg.NtfyToken
 	h.cfg.NotifyOnComplete = newCfg.NotifyOnComplete
 	h.cfg.HideProcessingTmp = newCfg.HideProcessingTmp
+	h.cfg.AllowSoftwareFallback = newCfg.AllowSoftwareFallback
 	h.cfg.Features = newCfg.Features
 
 	h.pushover.UserKey = newCfg.PushoverUserKey
@@ -796,6 +854,105 @@ func (h *Handler) RetryJob(w http.ResponseWriter, r *http.Request) {
 	// Remove the failed job
 	if _, err := h.queue.Remove(id); err != nil {
 		log.Printf("Failed to remove job %s after retry: %v", id, err)
+	}
+
+	writeJSON(w, http.StatusOK, newJob)
+}
+
+// ForceRetryJob handles POST /api/jobs/:id/force
+// This resets a skipped or no_gain job to pending with ForceTranscode enabled,
+// bypassing skip checks and size comparison.
+func (h *Handler) ForceRetryJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	job := h.queue.Get(id)
+	if job == nil {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+
+	if job.Status != jobs.StatusSkipped && job.Status != jobs.StatusNoGain {
+		writeError(w, http.StatusBadRequest, "can only force retry skipped or no_gain jobs")
+		return
+	}
+
+	if err := h.queue.ForceRetryJob(id); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to force retry: %v", err))
+		return
+	}
+
+	// Get updated job
+	updatedJob := h.queue.Get(id)
+	writeJSON(w, http.StatusOK, updatedJob)
+}
+
+// RetryWithPresetRequest is the request body for RetryWithPreset
+type RetryWithPresetRequest struct {
+	PresetID string `json:"preset_id"`
+}
+
+// RetryWithPreset handles POST /api/jobs/:id/retry-preset
+// This creates a new job with a different preset for skipped or no_gain jobs.
+func (h *Handler) RetryWithPreset(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	var req RetryWithPresetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.PresetID == "" {
+		writeError(w, http.StatusBadRequest, "preset_id required")
+		return
+	}
+
+	// Validate preset exists
+	preset := ffmpeg.GetPreset(req.PresetID)
+	if preset == nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown preset: %s", req.PresetID))
+		return
+	}
+
+	job := h.queue.Get(id)
+	if job == nil {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+
+	if job.Status != jobs.StatusSkipped && job.Status != jobs.StatusNoGain {
+		writeError(w, http.StatusBadRequest, "can only retry skipped or no_gain jobs with a different preset")
+		return
+	}
+
+	// Re-probe the file
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	probe, err := h.browser.ProbeFile(ctx, job.InputPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to probe file: %v", err))
+		return
+	}
+
+	// Add new job with new preset
+	newJob, err := h.queue.Add(job.InputPath, req.PresetID, probe)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create job: %v", err))
+		return
+	}
+
+	// Remove the old job
+	if _, err := h.queue.Remove(id); err != nil {
+		log.Printf("Failed to remove job %s after retry with preset: %v", id, err)
 	}
 
 	writeJSON(w, http.StatusOK, newJob)

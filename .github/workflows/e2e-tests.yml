@@ -1,0 +1,66 @@
+name: E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build Shrinkray
+        run: go build -o shrinkray ./cmd/shrinkray
+
+      - name: Create test media directory
+        run: mkdir -p /tmp/test-media
+
+      - name: Start Shrinkray server
+        run: |
+          ./shrinkray -media /tmp/test-media -port 8080 &
+          for i in {1..30}; do
+            if curl -s http://localhost:8080 > /dev/null; then
+              echo "Server is ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run Playwright tests
+        run: npm test
+        env:
+          SHRINKRAY_URL: http://localhost:8080
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

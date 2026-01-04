@@ -1,6 +1,20 @@
 # Shrinkray
 
+> **This is a community fork of [gwlsn/shrinkray](https://github.com/gwlsn/shrinkray).**
+>
+> The original project focuses on UI polish, scheduling, and quality controls.
+> This fork focuses on hardware encoding reliability and auth.
+>
+> **Choose the original if you want:** A simpler click and go experience.
+>
+> **Choose this fork if you need:** VAAPI fixes for Intel Arc/AMD, authentication (OIDC/password), ntfy notifications
+
 A simple video transcoding tool for Unraid. Select a folder, pick a preset, and shrink your media library.
+
+## Fork Differences
+
+If you're running Intel Arc, AMD VAAPI, or need authentication—use this fork.
+Otherwise use [the original](https://github.com/gwlsn/shrinkray).
 
 ## Quick Start (Unraid)
 
@@ -59,11 +73,50 @@ Automatically detected and used when available:
 | Platform | Encoder |
 |----------|---------|
 | Intel | Quick Sync (QSV) |
+| Intel Arc | VAAPI |
 | NVIDIA | NVENC |
 | AMD (Linux) | VAAPI |
 | macOS | VideoToolbox |
 
 Falls back to software encoding if no hardware is available.
+
+### Intel Arc GPU Setup (Docker/Unraid)
+
+For Intel Arc A380, A770, B580 and similar GPUs:
+
+```bash
+docker run -d \
+  --name shrinkray \
+  --device /dev/dri:/dev/dri \
+  --group-add render \
+  -e LIBVA_DRIVER_NAME=iHD \
+  -e PUID=99 \
+  -e PGID=100 \
+  -p 8080:8080 \
+  -v /path/to/config:/config \
+  -v /path/to/media:/media \
+  ghcr.io/jesposito/shrinkray:latest
+```
+
+Key settings:
+- `--device /dev/dri:/dev/dri` - Pass GPU device to container
+- `--group-add render` - Add render group permissions (may need GID like `105`)
+- `-e LIBVA_DRIVER_NAME=iHD` - Intel Arc requires the iHD driver
+
+**Verify GPU access:**
+```bash
+docker exec -it shrinkray vainfo
+```
+
+### Troubleshooting VAAPI
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| Exit code 218 mid-encode | 10-bit/HDR format mismatch | Update to latest version (auto-detects bit depth) |
+| "auto_scale_0" filter error | Missing VAAPI filter chain | Update to latest version (fixed) |
+| "Cannot open DRM render node" | No GPU access | Add `--device /dev/dri:/dev/dri` |
+| "vaInitialize failed" | Wrong driver | Set `LIBVA_DRIVER_NAME=iHD` for Intel Arc |
+| "Permission denied" | Render group missing | Add `--group-add render` or GID |
 
 ## Settings
 
@@ -71,8 +124,22 @@ Access via the gear icon in the WebUI:
 
 - **Original files**: Delete after transcode, or keep as `.old`
 - **Concurrent jobs**: 1-6 simultaneous transcodes
+- **Allow CPU encode fallback**: Retry failed GPU encodes with CPU (off by default)
 - **Pushover notifications**: Get notified when all jobs complete
 - **ntfy notifications**: Send notifications to an ntfy topic
+
+### CPU Encode Fallback
+
+By default, if a GPU encode fails, the job fails with a clear error message. This is intentional—on systems with working VAAPI (Intel Arc, AMD), GPU encodes should succeed. A failure usually indicates a configuration problem that should be fixed.
+
+Enable **"Allow CPU encode fallback"** only if:
+- A small number of files fail due to unusual codecs or formats
+- You want those files transcoded anyway, even if slower
+- You've verified your GPU is working correctly for other files
+
+When enabled, failed GPU encodes automatically retry with CPU encoding (slower but more compatible). The job status will show "Retrying with CPU encode" so you know what happened.
+
+**Unraid + Intel Arc users**: Keep this OFF. If encodes are failing, check your VAAPI setup first (see Troubleshooting VAAPI section).
 
 ## Pushover Notifications
 
@@ -108,6 +175,7 @@ Config is stored in `/config/shrinkray.yaml`. Most settings are available in the
 | `ntfy_server` | `https://ntfy.sh` | ntfy server URL for notifications |
 | `ntfy_topic` | *(empty)* | ntfy topic for notifications |
 | `ntfy_token` | *(empty)* | ntfy access token (optional) |
+| `allow_software_fallback` | `false` | Retry failed GPU encodes with CPU (see CPU Encode Fallback) |
 | `auth.enabled` | `false` | Require authentication |
 | `auth.provider` | `noop` | Auth provider name (`noop`, `password`) |
 | `auth.secret` | *(empty)* | HMAC secret used to sign session cookies |
@@ -165,6 +233,10 @@ auth:
 Environment overrides:
 
 ```bash
+# Enable CPU fallback for edge-case files
+SHRINKRAY_ALLOW_SOFTWARE_FALLBACK=true
+
+# Authentication
 SHRINKRAY_AUTH_ENABLED=1
 SHRINKRAY_AUTH_PROVIDER=password
 SHRINKRAY_AUTH_SECRET=change-me
@@ -203,6 +275,46 @@ go build -o shrinkray ./cmd/shrinkray
 ```
 
 Requires Go 1.22+ and FFmpeg with HEVC/AV1 support.
+
+## Testing
+
+### Go Unit Tests
+
+```bash
+go test ./...
+```
+
+### E2E Tests (Playwright)
+
+End-to-end tests verify the web UI works correctly across browsers.
+
+```bash
+# Install dependencies
+npm install
+npx playwright install
+
+# Run tests (requires running server)
+./shrinkray -media /tmp/test-media &
+npm test
+
+# Run with UI (interactive)
+npm run test:ui
+
+# Run headed (see browser)
+npm run test:headed
+
+# View test report
+npm run test:report
+```
+
+**Test suites:**
+- `navigation.spec.ts` - Layout, navigation, keyboard access
+- `file-browser.spec.ts` - File/folder browsing
+- `presets.spec.ts` - Preset selection, help modal
+- `job-queue.spec.ts` - Job display, progress, cancellation
+- `settings.spec.ts` - Settings panel, toggles
+- `sse-streaming.spec.ts` - Real-time updates
+- `accessibility.spec.ts` - A11y checks
 
 ## Docker Image Publishing
 

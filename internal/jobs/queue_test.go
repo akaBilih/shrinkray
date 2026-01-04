@@ -65,7 +65,7 @@ func TestQueueLifecycle(t *testing.T) {
 	job, _ := queue.Add(probe.Path, "compress", probe)
 
 	// Start job
-	err := queue.StartJob(job.ID, "/tmp/video.tmp.mkv")
+	err := queue.StartJob(job.ID, "/tmp/video.tmp.mkv", "cpu→cpu")
 	if err != nil {
 		t.Fatalf("failed to start job: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestQueuePersistence(t *testing.T) {
 	job2, _ := queue1.Add(probe4K.Path, "1080p", probe4K)
 
 	// Complete one job
-	queue1.StartJob(job1.ID, "/tmp/temp.mkv")
+	queue1.StartJob(job1.ID, "/tmp/temp.mkv", "cpu→cpu")
 	queue1.CompleteJob(job1.ID, outputPath, 500000)
 
 	// Create a new queue from the same file
@@ -221,7 +221,7 @@ func TestQueueRunningJobsResetOnLoad(t *testing.T) {
 	}
 
 	job, _ := queue1.Add(probe.Path, "compress", probe)
-	queue1.StartJob(job.ID, "/tmp/temp.mkv")
+	queue1.StartJob(job.ID, "/tmp/temp.mkv", "cpu→cpu")
 
 	// Verify it's running
 	if queue1.Get(job.ID).Status != StatusRunning {
@@ -266,7 +266,7 @@ func TestQueueGetNext(t *testing.T) {
 	}
 
 	// Start job1 - next should return job2
-	queue.StartJob(job1.ID, "/tmp/temp.mkv")
+	queue.StartJob(job1.ID, "/tmp/temp.mkv", "cpu→cpu")
 	next = queue.GetNext()
 	if next == nil || next.ID != job2.ID {
 		t.Errorf("expected job2, got %+v", next)
@@ -274,7 +274,7 @@ func TestQueueGetNext(t *testing.T) {
 
 	// Complete job1, start job2
 	queue.CompleteJob(job1.ID, "/media/video1.mkv", 500000)
-	queue.StartJob(job2.ID, "/tmp/temp.mkv")
+	queue.StartJob(job2.ID, "/tmp/temp.mkv", "cpu→cpu")
 
 	// Next should be job3
 	next = queue.GetNext()
@@ -326,7 +326,7 @@ func TestQueueStats(t *testing.T) {
 	queue.Add("/media/v2.mkv", "compress", probe)
 	queue.Add("/media/v3.mkv", "compress", probe)
 
-	queue.StartJob(job1.ID, "/tmp/temp.mkv")
+	queue.StartJob(job1.ID, "/tmp/temp.mkv", "cpu→cpu")
 	queue.CompleteJob(job1.ID, "/media/v1.mkv", 500000)
 
 	stats := queue.Stats()
@@ -378,7 +378,7 @@ func TestQueueSubscription(t *testing.T) {
 	}
 
 	// Start job
-	queue.StartJob(job.ID, "/tmp/temp.mkv")
+	queue.StartJob(job.ID, "/tmp/temp.mkv", "cpu→cpu")
 
 	select {
 	case event := <-ch:
@@ -393,4 +393,125 @@ func TestQueueSubscription(t *testing.T) {
 	queue.Unsubscribe(ch)
 
 	t.Log("Subscription working correctly")
+}
+
+func TestAddSoftwareFallback(t *testing.T) {
+	queue, err := NewQueue("")
+	if err != nil {
+		t.Fatalf("failed to create queue: %v", err)
+	}
+
+	probe := &ffmpeg.ProbeResult{
+		Path:     "/media/video.mkv",
+		Size:     1000000,
+		Duration: 10 * time.Second,
+	}
+
+	// Add a hardware job
+	job, _ := queue.Add(probe.Path, "compress-hevc", probe)
+	job.IsHardware = true
+	job.BitDepth = 8
+	job.PixFmt = "yuv420p"
+
+	// Create a software fallback
+	fallbackJob := queue.AddSoftwareFallback(job, "GPU encode failed, retried with CPU encode")
+
+	if fallbackJob == nil {
+		t.Fatal("expected fallback job to be created")
+	}
+
+	// Verify fallback job properties
+	if !fallbackJob.IsSoftwareFallback {
+		t.Error("fallback job should have IsSoftwareFallback=true")
+	}
+	if fallbackJob.OriginalJobID != job.ID {
+		t.Errorf("expected OriginalJobID=%s, got %s", job.ID, fallbackJob.OriginalJobID)
+	}
+	if fallbackJob.HardwarePath != "cpu→cpu" {
+		t.Errorf("expected HardwarePath='cpu→cpu', got %s", fallbackJob.HardwarePath)
+	}
+	if fallbackJob.IsHardware {
+		t.Error("fallback job should have IsHardware=false")
+	}
+	if fallbackJob.Encoder != "none" {
+		t.Errorf("expected Encoder='none', got %s", fallbackJob.Encoder)
+	}
+	if fallbackJob.FallbackReason != "GPU encode failed, retried with CPU encode" {
+		t.Errorf("unexpected FallbackReason: %s", fallbackJob.FallbackReason)
+	}
+
+	// Verify original job fields are copied
+	if fallbackJob.InputPath != job.InputPath {
+		t.Error("InputPath not copied to fallback job")
+	}
+	if fallbackJob.PresetID != job.PresetID {
+		t.Error("PresetID not copied to fallback job")
+	}
+	if fallbackJob.BitDepth != job.BitDepth {
+		t.Error("BitDepth not copied to fallback job")
+	}
+	if fallbackJob.PixFmt != job.PixFmt {
+		t.Error("PixFmt not copied to fallback job")
+	}
+}
+
+func TestAddSoftwareFallbackRateLimit(t *testing.T) {
+	queue, err := NewQueue("")
+	if err != nil {
+		t.Fatalf("failed to create queue: %v", err)
+	}
+
+	probe := &ffmpeg.ProbeResult{
+		Path:     "/media/video.mkv",
+		Size:     1000000,
+		Duration: 10 * time.Second,
+	}
+
+	// Create 5 fallbacks (the rate limit max)
+	for i := 0; i < 5; i++ {
+		job, _ := queue.Add(probe.Path, "compress-hevc", probe)
+		job.IsHardware = true
+		fallback := queue.AddSoftwareFallback(job, "test fallback")
+		if fallback == nil {
+			t.Fatalf("fallback %d should have been created", i+1)
+		}
+	}
+
+	// 6th fallback should be rate-limited (returns nil)
+	job, _ := queue.Add(probe.Path, "compress-hevc", probe)
+	job.IsHardware = true
+	fallback := queue.AddSoftwareFallback(job, "test fallback")
+	if fallback != nil {
+		t.Error("6th fallback should have been rate-limited")
+	}
+}
+
+func TestFailJobWithFallbackReason(t *testing.T) {
+	queue, err := NewQueue("")
+	if err != nil {
+		t.Fatalf("failed to create queue: %v", err)
+	}
+
+	probe := &ffmpeg.ProbeResult{
+		Path:     "/media/video.mkv",
+		Size:     1000000,
+		Duration: 10 * time.Second,
+	}
+
+	job, _ := queue.Add(probe.Path, "compress-hevc", probe)
+	queue.StartJob(job.ID, "/tmp/temp.mkv", "vaapi→vaapi")
+
+	// Fail with fallback reason
+	queue.FailJobWithDetails(job.ID, "GPU encode failed", &FailJobDetails{
+		ExitCode:       1,
+		FallbackReason: "Enable 'Allow CPU encode fallback' in Settings to retry on CPU",
+	})
+
+	failedJob := queue.Get(job.ID)
+	if failedJob.Status != StatusFailed {
+		t.Errorf("expected status Failed, got %s", failedJob.Status)
+	}
+	if failedJob.FallbackReason != "Enable 'Allow CPU encode fallback' in Settings to retry on CPU" {
+		t.Errorf("unexpected FallbackReason: %s", failedJob.FallbackReason)
+	}
 }
