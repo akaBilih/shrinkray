@@ -4440,6 +4440,13 @@
                     if (job.status === 'failed') cachedStats.failed++;
                     updateStats(cachedStats);
                 }
+            } else {
+                // Job not in cache (e.g., page loaded after job started) - add it
+                cachedJobs.push(job);
+                ensureLocalStartedAt(job, getStartedAtMs(job));
+                if (virtualScrollEnabled) {
+                    addJobToVirtualState(job);
+                }
             }
 
             if (job.status !== 'failed') {
