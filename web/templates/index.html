@@ -5328,6 +5328,7 @@
             eventSource = new EventSource('/api/jobs/stream');
 
             eventSource.onmessage = (event) => {
+                try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'init') {
                     updateJobs(data.jobs);
@@ -5390,6 +5391,9 @@
                 } else {
                     // Fallback: debounced full refresh for unknown event types
                     debouncedRefreshJobs();
+                }
+                } catch (err) {
+                    console.error('SSE message handler error:', err);
                 }
             };
 
