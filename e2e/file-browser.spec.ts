@@ -6,24 +6,18 @@ test.describe('File Browser', () => {
     await page.goto('/');
   });
 
-  test('file browser panel exists', async ({ page }) => {
-    // The file browser area should exist
-    const browser = page.locator('#file-browser, .browser-panel, .file-list');
-    await expect(browser.first()).toBeVisible();
+  test('file list exists', async ({ shrinkray }) => {
+    await shrinkray.goto();
+    await expect(shrinkray.fileList).toBeVisible();
   });
 
-  test('preset dropdown has options', async ({ page }) => {
-    const dropdown = page.locator('#preset');
-    await expect(dropdown).toBeVisible();
-
-    // Should have options
-    const options = dropdown.locator('option');
-    const count = await options.count();
-    expect(count).toBeGreaterThanOrEqual(1);
+  test('breadcrumb exists', async ({ shrinkray }) => {
+    await shrinkray.goto();
+    await expect(shrinkray.breadcrumb).toBeVisible();
   });
 
-  test('start button exists', async ({ page }) => {
-    const startBtn = page.locator('#start-btn');
-    await expect(startBtn).toBeVisible();
+  test('start button exists', async ({ shrinkray }) => {
+    await shrinkray.goto();
+    await expect(shrinkray.startButton).toBeVisible();
   });
 });
