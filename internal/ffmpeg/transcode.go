@@ -448,9 +448,26 @@ func (t *Transcoder) Transcode(
 	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, subtitleCodecs, subtitleHandling, bitDepth, pixFmt)
 
 	// Build ffmpeg command
-	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output
+	// Structure: ffmpeg [inputArgs] -f format -i input [outputArgs] output
 	args := []string{}
 	args = append(args, inputArgs...)
+
+	// Force format detection for container files to prevent misdetection
+	// FFmpeg sometimes misdetects MKV files as EAC3 audio when probing fails
+	ext := strings.ToLower(filepath.Ext(inputPath))
+	switch ext {
+	case ".mkv", ".mka", ".mks":
+		args = append(args, "-f", "matroska")
+	case ".mp4", ".m4v", ".m4a":
+		args = append(args, "-f", "mp4")
+	case ".avi":
+		args = append(args, "-f", "avi")
+	case ".mov":
+		args = append(args, "-f", "mov")
+	case ".ts", ".m2ts", ".mts":
+		args = append(args, "-f", "mpegts")
+	}
+
 	args = append(args,
 		"-i", inputPath,
 		"-y",                  // Overwrite output without asking
