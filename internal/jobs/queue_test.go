@@ -65,7 +65,7 @@ func TestQueueLifecycle(t *testing.T) {
 	job, _ := queue.Add(probe.Path, "compress", probe)
 
 	// Start job
-	err := queue.StartJob(job.ID, "/tmp/video.tmp.mkv")
+	err := queue.StartJob(job.ID, "/tmp/video.tmp.mkv", "cpu→cpu")
 	if err != nil {
 		t.Fatalf("failed to start job: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestQueuePersistence(t *testing.T) {
 	job2, _ := queue1.Add(probe4K.Path, "1080p", probe4K)
 
 	// Complete one job
-	queue1.StartJob(job1.ID, "/tmp/temp.mkv")
+	queue1.StartJob(job1.ID, "/tmp/temp.mkv", "cpu→cpu")
 	queue1.CompleteJob(job1.ID, outputPath, 500000)
 
 	// Create a new queue from the same file
@@ -221,7 +221,7 @@ func TestQueueRunningJobsResetOnLoad(t *testing.T) {
 	}
 
 	job, _ := queue1.Add(probe.Path, "compress", probe)
-	queue1.StartJob(job.ID, "/tmp/temp.mkv")
+	queue1.StartJob(job.ID, "/tmp/temp.mkv", "cpu→cpu")
 
 	// Verify it's running
 	if queue1.Get(job.ID).Status != StatusRunning {
@@ -266,7 +266,7 @@ func TestQueueGetNext(t *testing.T) {
 	}
 
 	// Start job1 - next should return job2
-	queue.StartJob(job1.ID, "/tmp/temp.mkv")
+	queue.StartJob(job1.ID, "/tmp/temp.mkv", "cpu→cpu")
 	next = queue.GetNext()
 	if next == nil || next.ID != job2.ID {
 		t.Errorf("expected job2, got %+v", next)
@@ -274,7 +274,7 @@ func TestQueueGetNext(t *testing.T) {
 
 	// Complete job1, start job2
 	queue.CompleteJob(job1.ID, "/media/video1.mkv", 500000)
-	queue.StartJob(job2.ID, "/tmp/temp.mkv")
+	queue.StartJob(job2.ID, "/tmp/temp.mkv", "cpu→cpu")
 
 	// Next should be job3
 	next = queue.GetNext()
@@ -326,7 +326,7 @@ func TestQueueStats(t *testing.T) {
 	queue.Add("/media/v2.mkv", "compress", probe)
 	queue.Add("/media/v3.mkv", "compress", probe)
 
-	queue.StartJob(job1.ID, "/tmp/temp.mkv")
+	queue.StartJob(job1.ID, "/tmp/temp.mkv", "cpu→cpu")
 	queue.CompleteJob(job1.ID, "/media/v1.mkv", 500000)
 
 	stats := queue.Stats()
@@ -378,7 +378,7 @@ func TestQueueSubscription(t *testing.T) {
 	}
 
 	// Start job
-	queue.StartJob(job.ID, "/tmp/temp.mkv")
+	queue.StartJob(job.ID, "/tmp/temp.mkv", "cpu→cpu")
 
 	select {
 	case event := <-ch:

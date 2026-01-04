@@ -630,7 +630,8 @@ func (q *Queue) GetNext() *Job {
 
 // StartJob marks a job as running.
 // Accepts jobs in pending or pending_probe status.
-func (q *Queue) StartJob(id string, tempPath string) error {
+// hardwarePath describes the decode→encode pipeline (e.g., "vaapi→vaapi", "cpu→vaapi")
+func (q *Queue) StartJob(id string, tempPath string, hardwarePath string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -645,6 +646,7 @@ func (q *Queue) StartJob(id string, tempPath string) error {
 
 	job.Status = StatusRunning
 	job.TempPath = tempPath
+	job.HardwarePath = hardwarePath
 	job.StartedAt = time.Now()
 
 	if err := q.save(); err != nil {

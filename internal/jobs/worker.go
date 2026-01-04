@@ -371,8 +371,11 @@ func (w *Worker) processJob(job *Job) {
 	tempDir := w.cfg.GetTempDir(job.InputPath)
 	tempPath := ffmpeg.BuildTempPath(job.InputPath, tempDir)
 
+	// Determine the hardware path (decode→encode pipeline)
+	hardwarePath := ffmpeg.GetHardwarePath(preset.Encoder, job.PixFmt)
+
 	// Mark job as started
-	if err := w.queue.StartJob(job.ID, tempPath); err != nil {
+	if err := w.queue.StartJob(job.ID, tempPath, hardwarePath); err != nil {
 		// Job might have been cancelled or already started
 		return
 	}

@@ -48,6 +48,9 @@ type Job struct {
 	CompletedAt    time.Time `json:"completed_at,omitempty"`
 	SubtitleCodecs []string  `json:"subtitle_codecs,omitempty"`
 
+	// Hardware path tracking - records decode → encode pipeline
+	HardwarePath string `json:"hardware_path,omitempty"` // e.g., "vaapi→vaapi", "cpu→vaapi", "cpu→cpu"
+
 	// Software fallback fields - populated when HW encoding fails and retries with SW
 	IsSoftwareFallback bool   `json:"is_software_fallback,omitempty"` // True if this job is a SW retry
 	OriginalJobID      string `json:"original_job_id,omitempty"`      // ID of the failed HW job
