@@ -26,6 +26,11 @@ type Queue struct {
 
 	// Rate limiting for hardware fallbacks to prevent queue explosion
 	fallbackTimes []time.Time // Timestamps of recent fallback creations
+
+	// Debounced save mechanism to reduce lock contention
+	saveMu    sync.Mutex
+	saveTimer *time.Timer
+	saveDirty bool
 }
 
 // NewQueue creates a new job queue, optionally loading from a persistence file
@@ -111,32 +116,48 @@ func (q *Queue) load() error {
 	return nil
 }
 
-// save writes the queue to disk
+// save writes the queue to disk (must be called with q.mu held)
 func (q *Queue) save() error {
 	if q.filePath == "" {
 		return nil
 	}
 
-	// Ensure directory exists
-	dir := filepath.Dir(q.filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	// Build ordered job list
+	// Capture data while holding the lock
 	jobs := make([]*Job, 0, len(q.jobs))
 	for _, id := range q.order {
 		if job, ok := q.jobs[id]; ok {
-			jobs = append(jobs, job)
+			// Deep copy job to avoid races
+			jobCopy := *job
+			jobs = append(jobs, &jobCopy)
 		}
 	}
 
 	totalSaved := q.totalSaved
+	orderCopy := make([]string, len(q.order))
+	copy(orderCopy, q.order)
+
+	processedCopy := make(map[string]time.Time, len(q.processedPaths))
+	for k, v := range q.processedPaths {
+		processedCopy[k] = v
+	}
+
 	pd := persistenceData{
 		Jobs:           jobs,
-		Order:          q.order,
-		ProcessedPaths: q.processedPaths,
+		Order:          orderCopy,
+		ProcessedPaths: processedCopy,
 		TotalSaved:     &totalSaved,
+	}
+
+	// Do the actual I/O (this is still blocking, but data is copied)
+	return q.writeToFile(pd)
+}
+
+// writeToFile performs the actual disk write
+func (q *Queue) writeToFile(pd persistenceData) error {
+	// Ensure directory exists
+	dir := filepath.Dir(q.filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
 	}
 
 	data, err := json.MarshalIndent(pd, "", "  ")
@@ -151,6 +172,73 @@ func (q *Queue) save() error {
 	}
 
 	return os.Rename(tmpPath, q.filePath)
+}
+
+// scheduleSave schedules a debounced save operation.
+// Multiple calls within the debounce window are coalesced into a single save.
+// This reduces lock contention by avoiding disk I/O while holding the queue lock.
+func (q *Queue) scheduleSave() {
+	q.saveMu.Lock()
+	defer q.saveMu.Unlock()
+
+	q.saveDirty = true
+
+	// If a timer is already running, let it handle the save
+	if q.saveTimer != nil {
+		return
+	}
+
+	// Schedule save after 100ms debounce window
+	q.saveTimer = time.AfterFunc(100*time.Millisecond, func() {
+		q.saveMu.Lock()
+		q.saveTimer = nil
+		isDirty := q.saveDirty
+		q.saveDirty = false
+		q.saveMu.Unlock()
+
+		if isDirty {
+			q.mu.RLock()
+			err := q.saveSnapshot()
+			q.mu.RUnlock()
+			if err != nil {
+				fmt.Printf("Warning: failed to persist queue: %v\n", err)
+			}
+		}
+	})
+}
+
+// saveSnapshot captures a snapshot and writes to disk (must be called with q.mu held for reading)
+func (q *Queue) saveSnapshot() error {
+	if q.filePath == "" {
+		return nil
+	}
+
+	// Capture data while holding the read lock
+	jobs := make([]*Job, 0, len(q.jobs))
+	for _, id := range q.order {
+		if job, ok := q.jobs[id]; ok {
+			jobCopy := *job
+			jobs = append(jobs, &jobCopy)
+		}
+	}
+
+	totalSaved := q.totalSaved
+	orderCopy := make([]string, len(q.order))
+	copy(orderCopy, q.order)
+
+	processedCopy := make(map[string]time.Time, len(q.processedPaths))
+	for k, v := range q.processedPaths {
+		processedCopy[k] = v
+	}
+
+	pd := persistenceData{
+		Jobs:           jobs,
+		Order:          orderCopy,
+		ProcessedPaths: processedCopy,
+		TotalSaved:     &totalSaved,
+	}
+
+	return q.writeToFile(pd)
 }
 
 // Add adds a new job to the queue
@@ -175,7 +263,7 @@ func (q *Queue) Add(inputPath string, presetID string, probe *ffmpeg.ProbeResult
 
 	status := StatusPending
 	if skipReason != "" {
-		status = StatusFailed
+		status = StatusSkipped
 	}
 
 	job := &Job{
@@ -203,7 +291,7 @@ func (q *Queue) Add(inputPath string, presetID string, probe *ffmpeg.ProbeResult
 
 	// Broadcast appropriate event based on status
 	if skipReason != "" {
-		q.broadcast(JobEvent{Type: "failed", Job: job})
+		q.broadcast(JobEvent{Type: "skipped", Job: job})
 	} else {
 		q.broadcast(JobEvent{Type: "added", Job: job})
 	}
@@ -239,7 +327,7 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string) ([]*J
 
 		status := StatusPending
 		if skipReason != "" {
-			status = StatusFailed
+			status = StatusSkipped
 		}
 
 		job := &Job{
@@ -268,12 +356,10 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string) ([]*J
 		}
 	}
 
-	// Persist once after all jobs are added (not per-job)
-	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
-	}
-
 	q.mu.Unlock()
+
+	// Schedule debounced save (non-blocking, reduces lock contention)
+	q.scheduleSave()
 
 	// Broadcast events outside the lock to prevent SSE blocking queue operations
 	// Performance: send single batch event instead of N individual events
@@ -281,9 +367,9 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string) ([]*J
 		q.broadcast(JobEvent{Type: "batch_added", Jobs: addedJobs})
 	}
 
-	// Skipped jobs still get individual "failed" events for proper UI handling
+	// Skipped jobs get individual "skipped" events for proper UI handling
 	for _, job := range skippedJobs {
-		q.broadcast(JobEvent{Type: "failed", Job: job})
+		q.broadcast(JobEvent{Type: "skipped", Job: job})
 	}
 
 	return allJobs, nil
@@ -364,11 +450,10 @@ func (q *Queue) AddMultipleWithoutProbe(files []FileInfo, presetID string) []*Jo
 		jobs = append(jobs, job)
 	}
 
-	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
-	}
-
 	q.mu.Unlock()
+
+	// Schedule debounced save (non-blocking, reduces lock contention)
+	q.scheduleSave()
 
 	// Broadcast batch event
 	if len(jobs) > 0 {
@@ -415,7 +500,7 @@ func (q *Queue) UpdateJobAfterProbe(id string, probe *ffmpeg.ProbeResult) error 
 	}
 
 	if skipReason != "" {
-		job.Status = StatusFailed
+		job.Status = StatusSkipped
 		job.Error = skipReason
 		job.CompletedAt = time.Now()
 	} else {
@@ -428,7 +513,7 @@ func (q *Queue) UpdateJobAfterProbe(id string, probe *ffmpeg.ProbeResult) error 
 
 	// Broadcast appropriate event
 	if skipReason != "" {
-		q.broadcast(JobEvent{Type: "failed", Job: job})
+		q.broadcast(JobEvent{Type: "skipped", Job: job})
 	} else {
 		// Use a "probed" event type so frontend can update job details
 		q.broadcast(JobEvent{Type: "probed", Job: job})
@@ -799,6 +884,87 @@ func (q *Queue) FailJobWithDetails(id string, errMsg string, details *FailJobDet
 	return nil
 }
 
+// SkipJob marks a job as skipped (file already in target format or meets criteria)
+func (q *Queue) SkipJob(id string, reason string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return fmt.Errorf("job not found: %s", id)
+	}
+
+	job.Status = StatusSkipped
+	job.Error = reason
+	job.CompletedAt = time.Now()
+	job.TempPath = ""
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	q.broadcast(JobEvent{Type: "skipped", Job: job})
+
+	return nil
+}
+
+// NoGainJob marks a job as no_gain (transcoded file was larger than original)
+func (q *Queue) NoGainJob(id string, reason string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return fmt.Errorf("job not found: %s", id)
+	}
+
+	job.Status = StatusNoGain
+	job.Error = reason
+	job.CompletedAt = time.Now()
+	job.TempPath = ""
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	q.broadcast(JobEvent{Type: "no_gain", Job: job})
+
+	return nil
+}
+
+// ForceRetryJob resets a skipped or no_gain job to pending with ForceTranscode enabled.
+// This bypasses skip checks and size comparison on retry.
+func (q *Queue) ForceRetryJob(id string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return fmt.Errorf("job not found: %s", id)
+	}
+
+	if job.Status != StatusSkipped && job.Status != StatusNoGain {
+		return fmt.Errorf("can only force retry skipped or no_gain jobs, got: %s", job.Status)
+	}
+
+	// Reset job state
+	job.Status = StatusPending
+	job.Error = ""
+	job.Progress = 0
+	job.Speed = 0
+	job.ETA = ""
+	job.CompletedAt = time.Time{}
+	job.ForceTranscode = true
+
+	if err := q.save(); err != nil {
+		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+	}
+
+	q.broadcast(JobEvent{Type: "added", Job: job})
+
+	return nil
+}
+
 // CancelJob cancels a job
 func (q *Queue) CancelJob(id string) error {
 	q.mu.Lock()
@@ -1086,6 +1252,8 @@ type Stats struct {
 	Complete     int   `json:"complete"`
 	Failed       int   `json:"failed"`
 	Cancelled    int   `json:"cancelled"`
+	Skipped      int   `json:"skipped"`
+	NoGain       int   `json:"no_gain"`
 	Total        int   `json:"total"`
 	TotalSaved   int64 `json:"total_saved"` // Total bytes saved by completed jobs
 }
@@ -1110,6 +1278,10 @@ func (q *Queue) Stats() Stats {
 			stats.Failed++
 		case StatusCancelled:
 			stats.Cancelled++
+		case StatusSkipped:
+			stats.Skipped++
+		case StatusNoGain:
+			stats.NoGain++
 		}
 	}
 	stats.TotalSaved = q.totalSaved
