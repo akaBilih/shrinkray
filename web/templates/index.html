@@ -3853,10 +3853,16 @@
         }
 
         async function browse(path = '', preserveSelections = false, options = {}) {
-            const { updateHistory = true, replaceHistory = false } = options;
+            const { updateHistory = true, replaceHistory = false, retryCount = 0 } = options;
+            const maxRetries = 3;
+            const retryDelays = [1000, 2000, 4000]; // Exponential backoff
+
             try {
                 const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse';
                 const resp = await fetch(url);
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
                 const data = await resp.json();
 
                 currentPath = data.path;
@@ -3909,6 +3915,14 @@
 
             } catch (err) {
                 console.error('Browse error:', err);
+                // Retry with exponential backoff if backend isn't ready
+                if (retryCount < maxRetries) {
+                    const delay = retryDelays[retryCount] || 4000;
+                    console.log(`Browse failed, retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+                    setTimeout(() => {
+                        browse(path, preserveSelections, { ...options, retryCount: retryCount + 1 });
+                    }, delay);
+                }
             }
         }
 
@@ -5663,15 +5677,33 @@
             }
         }
 
+        let sseInitReceived = false;
+        let sseInitFallbackTimer = null;
+
         function connectSSE() {
             if (eventSource) eventSource.close();
+            sseInitReceived = false;
 
             eventSource = new EventSource('/api/jobs/stream');
+
+            // Fallback: if SSE doesn't send init within 2s, fetch jobs via REST
+            if (sseInitFallbackTimer) clearTimeout(sseInitFallbackTimer);
+            sseInitFallbackTimer = setTimeout(() => {
+                if (!sseInitReceived) {
+                    console.log('SSE init timeout, fetching jobs via REST fallback');
+                    refreshJobs();
+                }
+            }, 2000);
 
             eventSource.onmessage = (event) => {
                 try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'init') {
+                    sseInitReceived = true;
+                    if (sseInitFallbackTimer) {
+                        clearTimeout(sseInitFallbackTimer);
+                        sseInitFallbackTimer = null;
+                    }
                     updateJobs(data.jobs);
                     updateStats(data.stats);
                 } else if (data.type === 'notify_sent') {
