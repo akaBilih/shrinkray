@@ -5520,6 +5520,15 @@
             const upNextSection = document.getElementById('up-next-section');
             const upNextList = document.getElementById('up-next-list');
 
+            if (!panel) {
+                return;
+            }
+
+            if (document.body.dataset.layout === 'tabs' && document.body.dataset.activeTab !== 'active') {
+                panel.style.display = 'none';
+                return;
+            }
+
             // Performance: Use status indexes for O(1) lookup when virtual scroll is enabled
             let runningJobs, pendingJobs;
             if (virtualScrollEnabled) {
@@ -5997,6 +6006,7 @@
                     settingsOverlay.classList.remove('open');
                 }
             }
+            updateActivePanel();
         }
 
         function applyLayoutDesign(design) {
