@@ -281,10 +281,17 @@ func (w *Worker) run() {
 		case <-w.ctx.Done():
 			return
 		default:
-			// Try to get next job
+			if !w.isScheduleAllowed() {
+				select {
+				case <-w.ctx.Done():
+					return
+				case <-time.After(30 * time.Second):
+					continue
+				}
+			}
+
 			job := w.queue.GetNext()
 			if job == nil {
-				// No jobs available, wait a bit
 				select {
 				case <-w.ctx.Done():
 					return
@@ -293,10 +300,25 @@ func (w *Worker) run() {
 				}
 			}
 
-			// Process the job
 			w.processJob(job)
 		}
 	}
+}
+
+func (w *Worker) isScheduleAllowed() bool {
+	if !w.cfg.ScheduleEnabled {
+		return true
+	}
+
+	hour := time.Now().Hour()
+	start := w.cfg.ScheduleStartHour
+	end := w.cfg.ScheduleEndHour
+
+	if start > end {
+		return hour >= start || hour < end
+	}
+
+	return hour >= start && hour < end
 }
 
 // processJob handles a single transcoding job
@@ -391,9 +413,8 @@ func (w *Worker) processJob(job *Job) {
 		}
 	}()
 
-	// Run the transcode
 	duration := time.Duration(job.Duration) * time.Millisecond
-	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.SubtitleCodecs, w.cfg.SubtitleHandling, job.BitDepth, job.PixFmt, job.VideoCodec, progressCh)
+	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.SubtitleCodecs, w.cfg.SubtitleHandling, job.BitDepth, job.PixFmt, job.VideoCodec, w.cfg.QualityHEVC, w.cfg.QualityAV1, progressCh)
 
 	if err != nil {
 		// Check if it was cancelled
@@ -449,9 +470,7 @@ func (w *Worker) processJob(job *Job) {
 		return
 	}
 
-	// Check if transcoded file is larger than original (unless force transcode is enabled)
-	if result.OutputSize >= job.InputSize && !job.ForceTranscode {
-		// Delete the temp file and mark as no_gain
+	if result.OutputSize >= job.InputSize && !job.ForceTranscode && !w.cfg.KeepLargerFiles {
 		os.Remove(tempPath)
 		w.queue.NoGainJob(job.ID, fmt.Sprintf("Transcoded file (%s) is larger than original (%s). File skipped.",
 			formatBytes(result.OutputSize), formatBytes(job.InputSize)))

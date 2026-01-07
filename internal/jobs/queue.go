@@ -3,6 +3,7 @@ package jobs
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -201,7 +202,7 @@ func (q *Queue) scheduleSave() {
 			err := q.saveSnapshot()
 			q.mu.RUnlock()
 			if err != nil {
-				fmt.Printf("Warning: failed to persist queue: %v\n", err)
+				log.Printf("[queue] Warning: failed to persist queue: %v", err)
 			}
 		}
 	})
@@ -286,7 +287,7 @@ func (q *Queue) Add(inputPath string, presetID string, probe *ffmpeg.ProbeResult
 
 	if err := q.save(); err != nil {
 		// Log error but don't fail - queue still works in memory
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	// Broadcast appropriate event based on status
@@ -408,7 +409,7 @@ func (q *Queue) AddWithoutProbe(inputPath string, presetID string, fileSize int6
 	q.order = append(q.order, job.ID)
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "added", Job: job})
@@ -509,7 +510,7 @@ func (q *Queue) UpdateJobAfterProbe(id string, probe *ffmpeg.ProbeResult) error 
 	}
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	// Broadcast appropriate event
@@ -549,7 +550,7 @@ func (q *Queue) AddSoftwareFallback(originalJob *Job, fallbackReason string) *Jo
 
 	// If too many fallbacks recently, refuse to create another
 	if len(q.fallbackTimes) >= fallbackRateLimitMax {
-		fmt.Printf("Warning: hardware fallback rate limit reached (%d in %v), skipping auto-retry\n",
+		log.Printf("[queue] Warning: hardware fallback rate limit reached (%d in %v), skipping auto-retry",
 			fallbackRateLimitMax, fallbackRateLimitWindow)
 		return nil
 	}
@@ -591,7 +592,7 @@ func (q *Queue) AddSoftwareFallback(originalJob *Job, fallbackReason string) *Jo
 	q.fallbackTimes = append(q.fallbackTimes, now)
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "added", Job: job})
@@ -656,7 +657,7 @@ func (q *Queue) StartJob(id string, tempPath string, hardwarePath string) error 
 	job.StartedAt = time.Now()
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "started", Job: job})
@@ -727,7 +728,7 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 	}
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "complete", Job: job})
@@ -754,7 +755,7 @@ func (q *Queue) ProcessedPaths() map[string]struct{} {
 	}
 	if removed > 0 {
 		if err := q.save(); err != nil {
-			fmt.Printf("Warning: failed to persist queue: %v\n", err)
+			log.Printf("[queue] Warning: failed to persist queue: %v", err)
 		}
 	}
 	return paths
@@ -822,7 +823,7 @@ func (q *Queue) MarkProcessedPaths(paths []string) int {
 	}
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	return added
@@ -836,7 +837,7 @@ func (q *Queue) ClearProcessedHistory() int {
 	count := len(q.processedPaths)
 	q.processedPaths = make(map[string]time.Time)
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 	return count
 }
@@ -888,7 +889,7 @@ func (q *Queue) FailJobWithDetails(id string, errMsg string, details *FailJobDet
 	}
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "failed", Job: job})
@@ -912,7 +913,7 @@ func (q *Queue) SkipJob(id string, reason string) error {
 	job.TempPath = ""
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "skipped", Job: job})
@@ -936,7 +937,7 @@ func (q *Queue) NoGainJob(id string, reason string) error {
 	job.TempPath = ""
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "no_gain", Job: job})
@@ -969,7 +970,7 @@ func (q *Queue) ForceRetryJob(id string) error {
 	job.ForceTranscode = true
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "added", Job: job})
@@ -995,7 +996,7 @@ func (q *Queue) CancelJob(id string) error {
 	job.CompletedAt = time.Now()
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "cancelled", Job: job})
@@ -1028,7 +1029,7 @@ func (q *Queue) Clear(includeCompleted bool) int {
 	q.order = newOrder
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	return count
@@ -1056,7 +1057,7 @@ func (q *Queue) Remove(id string) (*Job, error) {
 	q.order = newOrder
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.mu.Unlock()
@@ -1129,7 +1130,7 @@ func (q *Queue) ReorderPending(id string, direction string) (bool, error) {
 	q.order = newOrder
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "reordered"})
@@ -1215,7 +1216,7 @@ func (q *Queue) MovePending(id string, beforeID string) (bool, error) {
 	q.order = newOrder
 
 	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
+		log.Printf("[queue] Warning: failed to persist queue: %v", err)
 	}
 
 	q.broadcast(JobEvent{Type: "reordered"})

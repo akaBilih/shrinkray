@@ -418,8 +418,6 @@ func (t *Transcoder) IsPaused() bool {
 // It sends progress updates to the progress channel and returns the result
 // sourceBitrate is the source video bitrate in bits/second (for dynamic bitrate calculation)
 // bitDepth is the source video bit depth (8, 10, 12) - used for VAAPI format selection
-// pixFmt is the source pixel format (e.g., yuv420p, yuv444p) - used to detect unsupported formats
-// videoCodec is the source video codec (e.g., h264, mpeg4) - used to detect codecs requiring software decode
 func (t *Transcoder) Transcode(
 	ctx context.Context,
 	inputPath string,
@@ -432,6 +430,8 @@ func (t *Transcoder) Transcode(
 	bitDepth int,
 	pixFmt string,
 	videoCodec string,
+	qualityHEVC int,
+	qualityAV1 int,
 	progressCh chan<- Progress,
 ) (*TranscodeResult, error) {
 	startTime := time.Now()
@@ -443,12 +443,7 @@ func (t *Transcoder) Transcode(
 	}
 	inputSize := inputInfo.Size()
 
-	// Build preset args with source bitrate for dynamic calculation
-	// inputArgs go before -i (hwaccel), outputArgs go after
-	// bitDepth determines pixel format: nv12 for 8-bit, p010 for 10-bit+
-	// pixFmt determines if special handling is needed (e.g., yuv444p needs software decode)
-	// videoCodec determines if codec requires software decode (e.g., mpeg4/xvid)
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, subtitleCodecs, subtitleHandling, bitDepth, pixFmt, videoCodec)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, subtitleCodecs, subtitleHandling, bitDepth, pixFmt, videoCodec, qualityHEVC, qualityAV1)
 
 	// Build ffmpeg command
 	// Structure: ffmpeg [inputArgs] -f format -i input [outputArgs] output
@@ -724,6 +719,7 @@ func copyFile(src, dst string) error {
 // If replace=true, deletes original and copies temp to final location
 // If replace=false (keep), renames original to .old and copies temp to final location
 // Uses copy-then-delete instead of rename to support cross-filesystem moves.
+// Preserves the original file's modification time on the output.
 func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath string, err error) {
 	dir := filepath.Dir(inputPath)
 	base := filepath.Base(inputPath)
@@ -731,8 +727,13 @@ func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath stri
 	name := strings.TrimSuffix(base, ext)
 	finalPath = filepath.Join(dir, name+".mkv")
 
+	inputInfo, err := os.Stat(inputPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat input file: %w", err)
+	}
+	originalModTime := inputInfo.ModTime()
+
 	if replace {
-		// Replace mode: delete original, copy temp to final location
 		if err := os.Remove(inputPath); err != nil {
 			return "", fmt.Errorf("failed to remove original file: %w", err)
 		}
@@ -741,21 +742,23 @@ func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath stri
 			return "", fmt.Errorf("failed to copy temp to final location: %w", err)
 		}
 
+		_ = os.Chtimes(finalPath, originalModTime, originalModTime)
+
 		os.Remove(tempPath)
 		return finalPath, nil
 	}
 
-	// Keep mode: rename original to .old, copy temp to final location
 	oldPath := inputPath + ".old"
 	if err := os.Rename(inputPath, oldPath); err != nil {
 		return "", fmt.Errorf("failed to rename original to .old: %w", err)
 	}
 
 	if err := copyFile(tempPath, finalPath); err != nil {
-		// Try to restore original
-		os.Rename(oldPath, inputPath)
+		_ = os.Rename(oldPath, inputPath)
 		return "", fmt.Errorf("failed to copy temp to final location: %w", err)
 	}
+
+	_ = os.Chtimes(finalPath, originalModTime, originalModTime)
 
 	os.Remove(tempPath)
 	return finalPath, nil
