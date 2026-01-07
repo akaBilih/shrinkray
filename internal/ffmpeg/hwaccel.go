@@ -469,8 +469,8 @@ func copyEncoders(src map[EncoderKey]*HWEncoder) map[EncoderKey]*HWEncoder {
 	return dst
 }
 
-// VAAAPIHealthCheck contains diagnostic information about VAAPI availability
-type VAAAPIHealthCheck struct {
+// VAAPIHealthCheck contains diagnostic information about VAAPI availability
+type VAAPIHealthCheck struct {
 	Available     bool     `json:"available"`
 	DevicePath    string   `json:"device_path,omitempty"`
 	Driver        string   `json:"driver,omitempty"`
@@ -481,8 +481,8 @@ type VAAAPIHealthCheck struct {
 
 // CheckVAAPIHealth performs a comprehensive VAAPI health check for diagnostics.
 // This is useful for troubleshooting Docker/container GPU passthrough issues.
-func CheckVAAPIHealth(ffmpegPath string) *VAAAPIHealthCheck {
-	result := &VAAAPIHealthCheck{
+func CheckVAAPIHealth(ffmpegPath string) *VAAPIHealthCheck {
+	result := &VAAPIHealthCheck{
 		RenderDevices: []string{},
 		Errors:        []string{},
 		Warnings:      []string{},
@@ -575,7 +575,7 @@ func CheckVAAPIHealth(ffmpegPath string) *VAAAPIHealthCheck {
 }
 
 // LogVAAPIHealth logs VAAPI health check results for diagnostics
-func LogVAAPIHealth(health *VAAAPIHealthCheck) {
+func LogVAAPIHealth(health *VAAPIHealthCheck) {
 	log.Println("[vaapi-health] VAAPI Health Check:")
 	log.Printf("[vaapi-health]   Available: %v", health.Available)
 	if health.DevicePath != "" {

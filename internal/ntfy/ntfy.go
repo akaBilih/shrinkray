@@ -3,9 +3,16 @@ package ntfy
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 )
+
+// httpClient is a shared HTTP client with timeout for all ntfy requests
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
 
 const defaultServerURL = "https://ntfy.sh"
 
@@ -53,11 +60,14 @@ func (c *Client) Send(title, message string) error {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send notification: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Drain response body to allow connection reuse
+	io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("ntfy returned status %d", resp.StatusCode)

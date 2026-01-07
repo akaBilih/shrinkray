@@ -3,10 +3,16 @@ package pushover
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
 
 const apiURL = "https://api.pushover.net/1/messages.json"
 
@@ -41,7 +47,7 @@ func (c *Client) Send(title, message string) error {
 	data.Set("title", title)
 	data.Set("message", message)
 
-	resp, err := http.PostForm(apiURL, data)
+	resp, err := httpClient.PostForm(apiURL, data)
 	if err != nil {
 		return fmt.Errorf("failed to send notification: %w", err)
 	}
@@ -57,6 +63,7 @@ func (c *Client) Send(title, message string) error {
 		return fmt.Errorf("pushover returned status %d", resp.StatusCode)
 	}
 
+	io.Copy(io.Discard, resp.Body)
 	return nil
 }
 

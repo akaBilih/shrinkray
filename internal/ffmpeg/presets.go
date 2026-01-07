@@ -238,8 +238,9 @@ func isVAAPIIncompatibleCodec(codec string) bool {
 // bitDepth is the source video bit depth (8, 10, 12) - used for VAAPI format selection
 // pixFmt is the source pixel format - used to detect formats requiring software decode
 // videoCodec is the source video codec - used to detect codecs requiring software decode (e.g., mpeg4/xvid)
+// qualityHEVC/qualityAV1 are user-configured CRF values (0 = use preset defaults)
 // Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
-func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []string, subtitleHandling string, bitDepth int, pixFmt string, videoCodec string) (inputArgs []string, outputArgs []string) {
+func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []string, subtitleHandling string, bitDepth int, pixFmt string, videoCodec string, qualityHEVC int, qualityAV1 int) (inputArgs []string, outputArgs []string) {
 	key := EncoderKey{preset.Encoder, preset.Codec}
 	config, ok := encoderConfigs[key]
 	if !ok {
@@ -377,10 +378,13 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, subtitleCodecs []strin
 	}
 	// No filter for non-VAAPI paths without scaling (correct)
 
-	// Get quality setting
 	qualityStr := config.quality
+	if preset.Codec == CodecHEVC && qualityHEVC > 0 {
+		qualityStr = fmt.Sprintf("%d", qualityHEVC)
+	} else if preset.Codec == CodecAV1 && qualityAV1 > 0 {
+		qualityStr = fmt.Sprintf("%d", qualityAV1)
+	}
 
-	// For encoders that use dynamic bitrate calculation
 	if config.usesBitrate && sourceBitrate > 0 {
 		// Parse modifier (e.g., "0.5" = 50% of source bitrate)
 		modifier := 0.5 // default
