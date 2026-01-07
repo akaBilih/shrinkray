@@ -295,10 +295,6 @@
             display: none;
         }
 
-        body[data-layout="tabs"][data-active-tab="settings"] .settings-overlay {
-            display: block;
-        }
-
         body[data-layout="tabs"] .settings-overlay {
             position: static;
             inset: auto;
@@ -307,6 +303,13 @@
             visibility: visible;
             padding: 0;
             height: auto;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        body[data-layout="tabs"][data-active-tab="settings"] .settings-overlay {
+            display: flex;
         }
 
         body[data-layout="tabs"] .settings-panel {
@@ -314,6 +317,8 @@
             transform: none;
             width: 100%;
             height: 100%;
+            flex: 1;
+            min-height: 0;
             border-radius: var(--radius-lg);
             border: 1px solid var(--border);
             box-shadow: var(--shadow-sm);
