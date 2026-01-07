@@ -98,6 +98,10 @@ type Config struct {
 	// When enabled, Shrinkray will retry failed GPU encodes using CPU, which is slower but may succeed.
 	AllowSoftwareFallback bool `yaml:"allow_software_fallback"`
 
+	// LayoutDesign controls the UI layout design.
+	// Options: "split" (default) or "tabs".
+	LayoutDesign string `yaml:"layout_design"`
+
 	// Features contains feature flags for phased rollout of new functionality
 	Features FeatureFlags `yaml:"features"`
 
@@ -159,6 +163,7 @@ func DefaultConfig() *Config {
 		FFprobePath:      "ffprobe",
 		QueueFile:        "",
 		NtfyServer:       "https://ntfy.sh",
+		LayoutDesign:     "split",
 		Features:         DefaultFeatureFlags(),
 		Auth: AuthConfig{
 			Enabled:  false,
@@ -204,6 +209,9 @@ func Load(path string) (*Config, error) {
 		cfg.SubtitleHandling = "convert"
 	} else if cfg.SubtitleHandling != "convert" && cfg.SubtitleHandling != "drop" {
 		cfg.SubtitleHandling = "convert"
+	}
+	if cfg.LayoutDesign != "split" && cfg.LayoutDesign != "tabs" {
+		cfg.LayoutDesign = "split"
 	}
 
 	// Apply environment variable overrides for feature flags

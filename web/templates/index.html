@@ -224,6 +224,105 @@
             overflow: hidden;
         }
 
+        .tab-bar {
+            display: none;
+            gap: 8px;
+            align-items: center;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 8px;
+            width: 100%;
+        }
+
+        .tab-button {
+            flex: 1;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 10px 12px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-align: center;
+        }
+
+        .tab-button:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .tab-button[aria-selected="true"] {
+            background: var(--accent-light);
+            color: var(--accent);
+        }
+
+        body[data-layout="tabs"] .main {
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        body[data-layout="tabs"] .tab-bar {
+            display: flex;
+        }
+
+        body[data-layout="tabs"] .browser-panel,
+        body[data-layout="tabs"] .queue-panel,
+        body[data-layout="tabs"] .settings-overlay {
+            display: none;
+            width: 100%;
+        }
+
+        body[data-layout="tabs"][data-active-tab="media"] .browser-panel {
+            display: flex;
+        }
+
+        body[data-layout="tabs"][data-active-tab="queue"] .queue-panel {
+            display: block;
+        }
+
+        body[data-layout="tabs"][data-active-tab="active"] .queue-panel {
+            display: block;
+        }
+
+        body[data-layout="tabs"][data-active-tab="queue"] #active-panel {
+            display: none;
+        }
+
+        body[data-layout="tabs"][data-active-tab="active"] #queue-panel {
+            display: none;
+        }
+
+        body[data-layout="tabs"][data-active-tab="settings"] .settings-overlay {
+            display: block;
+        }
+
+        body[data-layout="tabs"] .settings-overlay {
+            position: static;
+            inset: auto;
+            background: transparent;
+            opacity: 1;
+            visibility: visible;
+            padding: 0;
+            height: auto;
+        }
+
+        body[data-layout="tabs"] .settings-panel {
+            position: static;
+            transform: none;
+            width: 100%;
+            height: 100%;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        body[data-layout="tabs"] .settings-close {
+            display: none;
+        }
+
         /* Browser Panel */
         .browser-panel {
             flex: 1;
@@ -2337,7 +2436,21 @@
         </header>
 
         <main class="main">
-            <div class="browser-panel">
+            <div class="tab-bar" role="tablist" aria-label="Layout tabs">
+                <button class="tab-button" type="button" data-tab="media" role="tab" aria-controls="browser-panel" aria-selected="true" onclick="setActiveTab('media')">
+                    Media / Files
+                </button>
+                <button class="tab-button" type="button" data-tab="queue" role="tab" aria-controls="queue-panel-wrapper" aria-selected="false" onclick="setActiveTab('queue')">
+                    Queue
+                </button>
+                <button class="tab-button" type="button" data-tab="active" role="tab" aria-controls="active-panel" aria-selected="false" onclick="setActiveTab('active')">
+                    Active
+                </button>
+                <button class="tab-button" type="button" data-tab="settings" role="tab" aria-controls="settings-overlay" aria-selected="false" onclick="setActiveTab('settings')">
+                    Settings
+                </button>
+            </div>
+            <div class="browser-panel" id="browser-panel">
                 <div class="panel">
                     <div class="file-list-bar">
                         <div class="breadcrumb" id="breadcrumb">
@@ -2398,7 +2511,7 @@
                 </div>
             </div>
 
-            <div class="queue-panel">
+            <div class="queue-panel" id="queue-panel-wrapper">
                 <div class="panel active-jobs-panel" id="active-panel" style="display: none;">
                     <div class="panel-header">
                         <button class="panel-toggle" type="button" onclick="togglePanel('active-panel')" aria-expanded="true" aria-controls="active-panel-content">
@@ -2509,11 +2622,9 @@
                     </div>
                 </div>
             </div>
-        </main>
-    </div>
 
-    <!-- Settings Panel -->
-    <div class="settings-overlay" id="settings-overlay" onclick="closeSettings(event)">
+            <!-- Settings Panel -->
+            <div class="settings-overlay" id="settings-overlay" onclick="closeSettings(event)">
         <div class="settings-panel" onclick="event.stopPropagation()">
             <div class="settings-header">
                 <span class="settings-title">Settings</span>
@@ -2577,6 +2688,21 @@
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="setting-hide-processing-tmp" onchange="toggleHideProcessingTmp(this.checked)" style="width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer;">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <div class="setting-group-title">Layout</div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Layout design</div>
+                            <div class="setting-desc">Choose between split panes or tabs</div>
+                        </div>
+                        <div class="setting-control">
+                            <select class="setting-select" id="setting-layout-design" onchange="updateLayoutDesign(this.value)">
+                                <option value="split">Split layout</option>
+                                <option value="tabs">Tabbed layout</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -2691,6 +2817,8 @@
             <div class="settings-status" id="settings-status"></div>
             <div class="settings-footer">Shrinkray v<span id="app-version"></span></div>
         </div>
+            </div>
+        </main>
     </div>
 
     <!-- Confirm Modal -->
@@ -2829,7 +2957,8 @@
             selectedPreset: 'shrinkray-selected-preset',
             includeSubfolders: 'shrinkray-include-subfolders',
             notifyOnComplete: 'shrinkray-notify-on-complete',
-            clearRecentlyCompleted: 'shrinkray-clear-recently-completed'
+            clearRecentlyCompleted: 'shrinkray-clear-recently-completed',
+            activeTab: 'shrinkray-active-tab'
         };
 
         const fileListState = {
@@ -2837,6 +2966,8 @@
             filter: 'all',
             hideEmptyFolders: false
         };
+        let currentLayout = 'split';
+        let activeTab = localStorage.getItem(storageKeys.activeTab) || 'media';
         let preferredPresetId = localStorage.getItem(storageKeys.selectedPreset) || '';
         let eventSource = null;
         let cachedJobs = [];
@@ -5800,13 +5931,62 @@
             }
         }
 
+        function setActiveTab(tab) {
+            if (document.body.dataset.layout !== 'tabs') {
+                return;
+            }
+            activeTab = tab;
+            document.body.dataset.activeTab = tab;
+            localStorage.setItem(storageKeys.activeTab, tab);
+            const buttons = document.querySelectorAll('.tab-button');
+            buttons.forEach((button) => {
+                const isActive = button.dataset.tab === tab;
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                button.setAttribute('tabindex', isActive ? '0' : '-1');
+            });
+            const settingsOverlay = document.getElementById('settings-overlay');
+            if (settingsOverlay) {
+                if (tab === 'settings') {
+                    settingsOverlay.classList.add('open');
+                } else {
+                    settingsOverlay.classList.remove('open');
+                }
+            }
+        }
+
+        function applyLayoutDesign(design) {
+            const normalized = design === 'tabs' ? 'tabs' : 'split';
+            currentLayout = normalized;
+            document.body.dataset.layout = normalized;
+            if (normalized === 'tabs') {
+                if (!activeTab) {
+                    activeTab = 'media';
+                }
+                setActiveTab(activeTab);
+            } else {
+                document.body.removeAttribute('data-active-tab');
+                const settingsOverlay = document.getElementById('settings-overlay');
+                if (settingsOverlay) {
+                    settingsOverlay.classList.remove('open');
+                }
+            }
+        }
+
         // Settings
         function openSettings() {
+            if (document.body.dataset.layout === 'tabs') {
+                setActiveTab('settings');
+                return;
+            }
             document.getElementById('settings-overlay').classList.add('open');
         }
 
         function closeSettings(event) {
             if (event && event.target !== event.currentTarget) return;
+            if (document.body.dataset.layout === 'tabs') {
+                setActiveTab('media');
+                return;
+            }
             document.getElementById('settings-overlay').classList.remove('open');
         }
 
@@ -5832,6 +6012,9 @@
                 document.getElementById('setting-original-handling').value = config.original_handling || 'replace';
                 document.getElementById('setting-subtitle-handling').value = config.subtitle_handling || 'convert';
                 document.getElementById('setting-workers').value = config.workers || 1;
+                const layoutDesign = config.layout_design || 'split';
+                document.getElementById('setting-layout-design').value = layoutDesign;
+                applyLayoutDesign(layoutDesign);
 
                 // Pushover settings
                 document.getElementById('setting-pushover-user').value = config.pushover_user_key || '';
@@ -5908,6 +6091,15 @@
                 statusEl.textContent = `Error: ${err.message}`;
                 statusEl.className = 'settings-status error';
                 return false;
+            }
+        }
+
+        async function updateLayoutDesign(value) {
+            const updated = await updateSetting('layout_design', value);
+            if (updated) {
+                applyLayoutDesign(value);
+            } else {
+                loadSettings();
             }
         }
 

@@ -610,24 +610,25 @@ func (h *Handler) ClearProcessedHistory(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	// Return a sanitized config (no sensitive paths exposed)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"version":             shrinkray.Version,
-		"media_path":          h.cfg.MediaPath,
-		"original_handling":   h.cfg.OriginalHandling,
-		"subtitle_handling":   h.cfg.SubtitleHandling,
-		"workers":             h.cfg.Workers,
-		"has_temp_path":       h.cfg.TempPath != "",
-		"pushover_user_key":   h.cfg.PushoverUserKey,
-		"pushover_app_token":  h.cfg.PushoverAppToken,
-		"pushover_configured": h.pushover.IsConfigured(),
-		"ntfy_server":         h.cfg.NtfyServer,
-		"ntfy_topic":          h.cfg.NtfyTopic,
-		"ntfy_token":          h.cfg.NtfyToken,
-		"ntfy_configured":     h.ntfy.IsConfigured(),
+		"version":                 shrinkray.Version,
+		"media_path":              h.cfg.MediaPath,
+		"original_handling":       h.cfg.OriginalHandling,
+		"subtitle_handling":       h.cfg.SubtitleHandling,
+		"workers":                 h.cfg.Workers,
+		"has_temp_path":           h.cfg.TempPath != "",
+		"pushover_user_key":       h.cfg.PushoverUserKey,
+		"pushover_app_token":      h.cfg.PushoverAppToken,
+		"pushover_configured":     h.pushover.IsConfigured(),
+		"ntfy_server":             h.cfg.NtfyServer,
+		"ntfy_topic":              h.cfg.NtfyTopic,
+		"ntfy_token":              h.cfg.NtfyToken,
+		"ntfy_configured":         h.ntfy.IsConfigured(),
 		"notify_on_complete":      h.cfg.NotifyOnComplete,
 		"hide_processing_tmp":     h.cfg.HideProcessingTmp,
 		"allow_software_fallback": h.cfg.AllowSoftwareFallback,
+		"layout_design":           h.cfg.LayoutDesign,
 		"auth_enabled":            h.cfg.Auth.Enabled,
-		"auth_provider":       h.cfg.Auth.Provider,
+		"auth_provider":           h.cfg.Auth.Provider,
 		// Feature flags for frontend
 		"features": map[string]bool{
 			"virtual_scroll":   h.cfg.Features.VirtualScroll,
@@ -641,17 +642,18 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateConfigRequest is the request body for updating config
 type UpdateConfigRequest struct {
-	OriginalHandling  *string `json:"original_handling,omitempty"`
-	SubtitleHandling  *string `json:"subtitle_handling,omitempty"`
-	Workers           *int    `json:"workers,omitempty"`
-	PushoverUserKey   *string `json:"pushover_user_key,omitempty"`
-	PushoverAppToken  *string `json:"pushover_app_token,omitempty"`
-	NtfyServer        *string `json:"ntfy_server,omitempty"`
-	NtfyTopic         *string `json:"ntfy_topic,omitempty"`
-	NtfyToken         *string `json:"ntfy_token,omitempty"`
-	NotifyOnComplete      *bool `json:"notify_on_complete,omitempty"`
-	HideProcessingTmp     *bool `json:"hide_processing_tmp,omitempty"`
-	AllowSoftwareFallback *bool `json:"allow_software_fallback,omitempty"`
+	OriginalHandling      *string `json:"original_handling,omitempty"`
+	SubtitleHandling      *string `json:"subtitle_handling,omitempty"`
+	Workers               *int    `json:"workers,omitempty"`
+	PushoverUserKey       *string `json:"pushover_user_key,omitempty"`
+	PushoverAppToken      *string `json:"pushover_app_token,omitempty"`
+	NtfyServer            *string `json:"ntfy_server,omitempty"`
+	NtfyTopic             *string `json:"ntfy_topic,omitempty"`
+	NtfyToken             *string `json:"ntfy_token,omitempty"`
+	NotifyOnComplete      *bool   `json:"notify_on_complete,omitempty"`
+	HideProcessingTmp     *bool   `json:"hide_processing_tmp,omitempty"`
+	AllowSoftwareFallback *bool   `json:"allow_software_fallback,omitempty"`
+	LayoutDesign          *string `json:"layout_design,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -717,6 +719,13 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AllowSoftwareFallback != nil {
 		h.cfg.AllowSoftwareFallback = *req.AllowSoftwareFallback
+	}
+	if req.LayoutDesign != nil {
+		if *req.LayoutDesign != "split" && *req.LayoutDesign != "tabs" {
+			writeError(w, http.StatusBadRequest, "layout_design must be 'split' or 'tabs'")
+			return
+		}
+		h.cfg.LayoutDesign = *req.LayoutDesign
 	}
 
 	// Persist config to disk
