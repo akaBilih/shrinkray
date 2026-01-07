@@ -295,10 +295,6 @@
             display: none;
         }
 
-        body[data-layout="tabs"][data-active-tab="settings"] .settings-overlay {
-            display: block;
-        }
-
         body[data-layout="tabs"] .settings-overlay {
             position: static;
             inset: auto;
@@ -308,9 +304,12 @@
             padding: 0;
             height: auto;
             flex: 1;
-            display: flex;
             min-height: 0;
             overflow: hidden;
+        }
+
+        body[data-layout="tabs"][data-active-tab="settings"] .settings-overlay {
+            display: flex;
         }
 
         body[data-layout="tabs"] .settings-panel {
