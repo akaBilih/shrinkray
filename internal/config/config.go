@@ -98,6 +98,30 @@ type Config struct {
 	// When enabled, Shrinkray will retry failed GPU encodes using CPU, which is slower but may succeed.
 	AllowSoftwareFallback bool `yaml:"allow_software_fallback"`
 
+	// QualityHEVC is the CRF value for HEVC encoding (lower = higher quality)
+	// 0 = use encoder-specific default
+	QualityHEVC int `yaml:"quality_hevc"`
+
+	// QualityAV1 is the CRF value for AV1 encoding (lower = higher quality)
+	// 0 = use encoder-specific default
+	QualityAV1 int `yaml:"quality_av1"`
+
+	// ScheduleEnabled enables time-based scheduling for transcoding
+	ScheduleEnabled bool `yaml:"schedule_enabled"`
+
+	// ScheduleStartHour is when transcoding is allowed to start (0-23, default 22 = 10 PM)
+	ScheduleStartHour int `yaml:"schedule_start_hour"`
+
+	// ScheduleEndHour is when transcoding must stop (0-23, default 6 = 6 AM)
+	ScheduleEndHour int `yaml:"schedule_end_hour"`
+
+	// KeepLargerFiles keeps transcoded files even if they're larger than the original
+	// Useful for users who want codec consistency across their library
+	KeepLargerFiles bool `yaml:"keep_larger_files"`
+
+	// LogLevel controls logging verbosity: debug, info, warn, error (default: info)
+	LogLevel string `yaml:"log_level"`
+
 	// LayoutDesign controls the UI layout design.
 	// Options: "split" (default) or "tabs".
 	LayoutDesign string `yaml:"layout_design"`
@@ -154,17 +178,24 @@ type OIDCAuthConfig struct {
 // DefaultConfig returns a config with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
-		MediaPath:        "/media",
-		TempPath:         "", // same directory as source
-		OriginalHandling: "replace",
-		SubtitleHandling: "convert",
-		Workers:          1,
-		FFmpegPath:       "ffmpeg",
-		FFprobePath:      "ffprobe",
-		QueueFile:        "",
-		NtfyServer:       "https://ntfy.sh",
-		LayoutDesign:     "split",
-		Features:         DefaultFeatureFlags(),
+		MediaPath:         "/media",
+		TempPath:          "",
+		OriginalHandling:  "replace",
+		SubtitleHandling:  "convert",
+		Workers:           1,
+		FFmpegPath:        "ffmpeg",
+		FFprobePath:       "ffprobe",
+		QueueFile:         "",
+		NtfyServer:        "https://ntfy.sh",
+		QualityHEVC:       0,
+		QualityAV1:        0,
+		ScheduleEnabled:   false,
+		ScheduleStartHour: 22,
+		ScheduleEndHour:   6,
+		KeepLargerFiles:   false,
+		LogLevel:          "info",
+		LayoutDesign:      "split",
+		Features:          DefaultFeatureFlags(),
 		Auth: AuthConfig{
 			Enabled:  false,
 			Provider: "noop",
@@ -212,6 +243,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.LayoutDesign != "split" && cfg.LayoutDesign != "tabs" {
 		cfg.LayoutDesign = "split"
+	}
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
 	}
 
 	// Apply environment variable overrides for feature flags

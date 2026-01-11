@@ -52,7 +52,9 @@ func NewHandler(browser *browse.Browser, queue *jobs.Queue, workerPool *jobs.Wor
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("[api] Failed to encode JSON response: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
@@ -284,7 +286,7 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 			// Original behavior: probe all files first (slower but complete info)
 			probes, err := h.browser.GetVideoFilesWithOptions(ctx, req.Paths, opts)
 			if err != nil {
-				fmt.Printf("Error getting video files: %v\n", err)
+				log.Printf("[api] Error getting video files: %v", err)
 				return
 			}
 
@@ -626,6 +628,12 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"notify_on_complete":      h.cfg.NotifyOnComplete,
 		"hide_processing_tmp":     h.cfg.HideProcessingTmp,
 		"allow_software_fallback": h.cfg.AllowSoftwareFallback,
+		"quality_hevc":            h.cfg.QualityHEVC,
+		"quality_av1":             h.cfg.QualityAV1,
+		"schedule_enabled":        h.cfg.ScheduleEnabled,
+		"schedule_start_hour":     h.cfg.ScheduleStartHour,
+		"schedule_end_hour":       h.cfg.ScheduleEndHour,
+		"keep_larger_files":       h.cfg.KeepLargerFiles,
 		"layout_design":           h.cfg.LayoutDesign,
 		"auth_enabled":            h.cfg.Auth.Enabled,
 		"auth_provider":           h.cfg.Auth.Provider,
@@ -640,7 +648,6 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateConfigRequest is the request body for updating config
 type UpdateConfigRequest struct {
 	OriginalHandling      *string `json:"original_handling,omitempty"`
 	SubtitleHandling      *string `json:"subtitle_handling,omitempty"`
@@ -653,6 +660,12 @@ type UpdateConfigRequest struct {
 	NotifyOnComplete      *bool   `json:"notify_on_complete,omitempty"`
 	HideProcessingTmp     *bool   `json:"hide_processing_tmp,omitempty"`
 	AllowSoftwareFallback *bool   `json:"allow_software_fallback,omitempty"`
+	QualityHEVC           *int    `json:"quality_hevc,omitempty"`
+	QualityAV1            *int    `json:"quality_av1,omitempty"`
+	ScheduleEnabled       *bool   `json:"schedule_enabled,omitempty"`
+	ScheduleStartHour     *int    `json:"schedule_start_hour,omitempty"`
+	ScheduleEndHour       *int    `json:"schedule_end_hour,omitempty"`
+	KeepLargerFiles       *bool   `json:"keep_larger_files,omitempty"`
 	LayoutDesign          *string `json:"layout_design,omitempty"`
 }
 
@@ -719,6 +732,30 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AllowSoftwareFallback != nil {
 		h.cfg.AllowSoftwareFallback = *req.AllowSoftwareFallback
+	}
+	if req.QualityHEVC != nil {
+		h.cfg.QualityHEVC = *req.QualityHEVC
+	}
+	if req.QualityAV1 != nil {
+		h.cfg.QualityAV1 = *req.QualityAV1
+	}
+	if req.ScheduleEnabled != nil {
+		h.cfg.ScheduleEnabled = *req.ScheduleEnabled
+	}
+	if req.ScheduleStartHour != nil {
+		hour := *req.ScheduleStartHour
+		if hour >= 0 && hour <= 23 {
+			h.cfg.ScheduleStartHour = hour
+		}
+	}
+	if req.ScheduleEndHour != nil {
+		hour := *req.ScheduleEndHour
+		if hour >= 0 && hour <= 23 {
+			h.cfg.ScheduleEndHour = hour
+		}
+	}
+	if req.KeepLargerFiles != nil {
+		h.cfg.KeepLargerFiles = *req.KeepLargerFiles
 	}
 	if req.LayoutDesign != nil {
 		if *req.LayoutDesign != "split" && *req.LayoutDesign != "tabs" {

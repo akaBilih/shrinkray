@@ -20,6 +20,7 @@ import (
 	"github.com/gwlsn/shrinkray/internal/config"
 	"github.com/gwlsn/shrinkray/internal/ffmpeg"
 	"github.com/gwlsn/shrinkray/internal/jobs"
+	"github.com/gwlsn/shrinkray/internal/logger"
 )
 
 func main() {
@@ -42,12 +43,13 @@ func main() {
 		}
 	}
 
-	// Load config
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		log.Printf("Warning: Could not load config from %s: %v", cfgPath, err)
 		cfg = config.DefaultConfig()
 	}
+
+	logger.Init(cfg.LogLevel)
 
 	// Override with environment variables
 	mediaOverride := ""
